@@ -8,6 +8,10 @@ import click
 
 from .watermark import add_image_watermark, add_text_watermark
 from .insert import insert_video
+from .logger_config import setup_logger, get_logger
+
+# 设置日志
+logger = setup_logger('video_watermark')
 
 
 # 定义位置选项常量
@@ -57,26 +61,44 @@ def cli():
               help='水印宽度（像素，保持宽高比），在缩放模式下有效')
 @click.option('--height', type=int, default=None,
               help='水印高度（像素，保持宽高比），在缩放模式下有效')
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
+              default='INFO', help='日志级别（默认：INFO）')
 def watermark(input, output, watermark, position, opacity, margin,
-              start_time, end_time, width, height, scaled):
+              start_time, end_time, width, height, scaled, log_level):
     """向视频添加图片水印"""
+    # 设置日志级别
+    logger.setLevel(getattr(logging, log_level))
+    logger.info("=" * 60)
+    logger.info("开始处理：图片水印")
+    logger.info(f"输入文件: {input}")
+    logger.info(f"水印文件: {watermark}")
+    logger.info(f"输出文件: {output}")
+
     try:
         # 检查输入文件
         if not os.path.isfile(input):
-            click.echo(f'错误：输入文件不存在: {input}', err=True)
+            error_msg = f'错误：输入文件不存在: {input}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
             sys.exit(1)
-        
+
         if not os.path.isfile(watermark):
-            click.echo(f'错误：水印文件不存在: {watermark}', err=True)
+            error_msg = f'错误：水印文件不存在: {watermark}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
             sys.exit(1)
-        
+
+        logger.debug("输入文件验证通过")
+
         # 转换位置参数
         position_h, position_v = POSITIONS[position]
-        
+        logger.debug(f"位置: {position} -> ({position_h}, {position_v})")
+
         # 转换时间
         start_sec = _time_str_to_seconds(start_time)
         end_sec = _time_str_to_seconds(end_time) if end_time else None
-        
+        logger.debug(f"时间范围: {start_sec}s - {end_sec}s")
+
         click.echo(f'正在添加水印到视频...')
         click.echo(f'  输入: {input}')
         click.echo(f'  水印: {watermark}')
@@ -89,6 +111,12 @@ def watermark(input, output, watermark, position, opacity, margin,
             click.echo(f'  位置: {position}')
         click.echo(f'  透明度: {opacity}')
         click.echo(f'  输出: {output}')
+
+        logger.info(f"模式: {'全尺寸' if fullsize_mode else '缩放'}")
+        if not fullsize_mode:
+            logger.info(f"位置: {position}")
+        logger.info(f"透明度: {opacity}")
+        logger.info("开始调用处理函数...")
 
         # 调用水印函数
         add_image_watermark(
@@ -104,12 +132,17 @@ def watermark(input, output, watermark, position, opacity, margin,
             height=height,
             fullsize=fullsize_mode
         )
-        
+
+        logger.info("处理完成")
         click.echo(f'✅ 水印添加成功: {output}')
-        
+
     except Exception as e:
+        error_msg = f'处理失败: {str(e)}'
+        logger.exception(error_msg)
         click.echo(f'❌ 错误: {str(e)}', err=True)
         sys.exit(1)
+    finally:
+        logger.info("=" * 60)
 
 
 @cli.command()
@@ -138,33 +171,58 @@ def watermark(input, output, watermark, position, opacity, margin,
               help='水印开始时间（秒或HH:MM:SS，默认：0）')
 @click.option('--end-time', '-e', type=str, default=None,
               help='水印结束时间（秒或HH:MM:SS，默认：视频结束）')
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
+              default='INFO', help='日志级别（默认：INFO）')
 def watermark_text(input, output, text, position, font_size, color, font,
-                   opacity, stroke_width, stroke_color, start_time, end_time):
+                   opacity, stroke_width, stroke_color, start_time, end_time, log_level):
     """向视频添加文字水印"""
+    # 设置日志级别
+    logger.setLevel(getattr(logging, log_level))
+    logger.info("=" * 60)
+    logger.info("开始处理：文字水印")
+    logger.info(f"输入文件: {input}")
+    logger.info(f"水印文字: {text}")
+    logger.info(f"输出文件: {output}")
+
     try:
         # 检查输入文件
         if not os.path.isfile(input):
-            click.echo(f'错误：输入文件不存在: {input}', err=True)
+            error_msg = f'错误：输入文件不存在: {input}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
             sys.exit(1)
-        
+
         if font and not os.path.isfile(font):
-            click.echo(f'错误：字体文件不存在: {font}', err=True)
+            error_msg = f'错误：字体文件不存在: {font}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
             sys.exit(1)
-        
+
+        logger.debug("输入文件验证通过")
+
         # 转换位置参数
         position_h, position_v = POSITIONS[position]
-        
+        logger.debug(f"位置: {position} -> ({position_h}, {position_v})")
+
         # 转换时间
         start_sec = _time_str_to_seconds(start_time)
         end_sec = _time_str_to_seconds(end_time) if end_time else None
-        
+        logger.debug(f"时间范围: {start_sec}s - {end_sec}s")
+
         click.echo(f'正在添加文字水印到视频...')
         click.echo(f'  输入: {input}')
         click.echo(f'  文字: {text}')
         click.echo(f'  位置: {position}')
         click.echo(f'  大小: {font_size}px')
         click.echo(f'  输出: {output}')
-        
+
+        logger.info(f"位置: {position}")
+        logger.info(f"字体大小: {font_size}px")
+        logger.info(f"颜色: {color}")
+        if font:
+            logger.info(f"字体: {font}")
+        logger.info(f"透明度: {opacity}")
+
         # 调用文字水印函数
         add_text_watermark(
             video_path=input,
@@ -180,12 +238,17 @@ def watermark_text(input, output, text, position, font_size, color, font,
             start_time=start_sec,
             end_time=end_sec
         )
-        
+
+        logger.info("处理完成")
         click.echo(f'✅ 文字水印添加成功: {output}')
-        
+
     except Exception as e:
+        error_msg = f'处理失败: {str(e)}'
+        logger.exception(error_msg)
         click.echo(f'❌ 错误: {str(e)}', err=True)
         sys.exit(1)
+    finally:
+        logger.info("=" * 60)
 
 
 @cli.command()
@@ -204,17 +267,32 @@ def watermark_text(input, output, text, position, font_size, color, font,
               help='交叉淡入淡出时长（秒）')
 @click.option('--seamless', is_flag=True, default=True,
               help='无缝插入模式（无交叉淡入淡出，直接拼接）[默认启用]')
-def insert(main, insert, output, position, audio_mode, crossfade, seamless):
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
+              default='INFO', help='日志级别（默认：INFO）')
+def insert(main, insert, output, position, audio_mode, crossfade, seamless, log_level):
     """将视频插入到主视频的指定位置"""
+    # 设置日志级别
+    logger.setLevel(getattr(logging, log_level))
+    logger.info("=" * 60)
+    logger.info("开始处理：插入视频")
+    logger.info(f"主视频: {main}")
+    logger.info(f"插入视频: {insert}")
+    logger.info(f"输出文件: {output}")
+
     try:
         # 检查输入文件
         for f in [main, insert]:
             if not os.path.isfile(f):
-                click.echo(f'错误：文件不存在: {f}', err=True)
+                error_msg = f'错误：文件不存在: {f}'
+                logger.error(error_msg)
+                click.echo(f'{error_msg}', err=True)
                 sys.exit(1)
+
+        logger.debug("输入文件验证通过")
 
         # 转换插入位置
         insert_pos = _time_str_to_seconds(position)
+        logger.debug(f"插入位置: {position} -> {insert_pos}秒")
 
         click.echo(f'正在插入视频...')
         click.echo(f'  主视频: {main}')
@@ -229,6 +307,11 @@ def insert(main, insert, output, position, audio_mode, crossfade, seamless):
             click.echo(f'  模式: 无缝插入（直接拼接）')
         click.echo(f'  输出: {output}')
 
+        logger.info(f"插入位置: {insert_pos}秒")
+        logger.info(f"音频模式: {audio_mode}")
+        if crossfade > 0:
+            logger.info(f"交叉淡入淡出: {crossfade}秒")
+
         # 调用视频插入函数
         insert_video(
             main_video_path=main,
@@ -240,11 +323,16 @@ def insert(main, insert, output, position, audio_mode, crossfade, seamless):
             seamless=seamless
         )
 
+        logger.info("处理完成")
         click.echo(f'✅ 视频插入成功: {output}')
 
     except Exception as e:
+        error_msg = f'处理失败: {str(e)}'
+        logger.exception(error_msg)
         click.echo(f'❌ 错误: {str(e)}', err=True)
         sys.exit(1)
+    finally:
+        logger.info("=" * 60)
 
 
 @cli.command()

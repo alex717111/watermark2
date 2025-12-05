@@ -2,6 +2,7 @@
 
 import sys
 import os
+import logging
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -18,6 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.watermark import add_image_watermark, add_text_watermark
 from src.insert import insert_video
+from src.logger_config import setup_logger
+
+# 设置日志
+logger = setup_logger('video_watermark_ui')
 
 
 class ProcessingThread(QThread):
@@ -29,17 +34,26 @@ class ProcessingThread(QThread):
         super().__init__()
         self.task_type = task_type
         self.params = params
+        self.logger = logging.getLogger('video_watermark_ui')
 
     def run(self):
         try:
+            self.logger.info(f"后台线程开始处理: {self.task_type}")
+
             if self.task_type == 'watermark':
+                self.logger.debug("调用图片水印函数")
                 add_image_watermark(**self.params)
             elif self.task_type == 'watermark_text':
+                self.logger.debug("调用文字水印函数")
                 add_text_watermark(**self.params)
             elif self.task_type == 'insert':
+                self.logger.debug("调用视频插入函数")
                 insert_video(**self.params)
+
+            self.logger.info("后台线程处理完成")
             self.finished.emit(True, "处理完成！")
         except Exception as e:
+            self.logger.exception(f"后台线程处理失败: {str(e)}")
             self.finished.emit(False, str(e))
 
 
@@ -50,9 +64,16 @@ class VideoWatermarkWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("视频水印工具 v1.0")
         self.setMinimumSize(1200, 800)
+        self.logger = logging.getLogger('video_watermark_ui')
+
+        self.logger.info("=" * 60)
+        self.logger.info("UI界面启动")
+        self.logger.info(f"窗口大小: {self.size().width()}x{self.size().height()}")
 
         # 初始化UI
         self.init_ui()
+
+        self.logger.info("UI初始化完成")
 
     def init_ui(self):
         """初始化UI"""
@@ -361,23 +382,28 @@ class VideoWatermarkWindow(QMainWindow):
 
     def browse_file(self, file_type):
         """浏览文件"""
+        self.logger.debug(f"浏览文件类型: {file_type}")
+
         if file_type == 'input':
             file_path, _ = QFileDialog.getOpenFileName(
                 self, "选择输入视频", "", "视频文件 (*.mp4 *.avi *.mov *.mkv *.webm);;所有文件 (*.*)"
             )
             if file_path:
+                self.logger.info(f"选择输入视频: {file_path}")
                 self.input_edit.setText(file_path)
                 # 自动生成输出文件名
                 if not self.output_edit.text():
                     path = Path(file_path)
                     output_path = path.parent / f"{path.stem}_wmarked.mp4"
                     self.output_edit.setText(str(output_path))
+                    self.logger.info(f"自动生成输出路径: {output_path}")
 
         elif file_type == 'output':
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "选择输出视频", "", "MP4文件 (*.mp4);;所有文件 (*.*)"
             )
             if file_path:
+                self.logger.info(f"选择输出视频: {file_path}")
                 self.output_edit.setText(file_path)
 
         elif file_type == 'watermark':
@@ -385,6 +411,7 @@ class VideoWatermarkWindow(QMainWindow):
                 self, "选择水印图片", "", "图片文件 (*.png *.jpg *.jpeg);;所有文件 (*.*)"
             )
             if file_path:
+                self.logger.info(f"选择水印图片: {file_path}")
                 self.watermark_edit.setText(file_path)
 
         elif file_type == 'insert':
@@ -392,21 +419,27 @@ class VideoWatermarkWindow(QMainWindow):
                 self, "选择插入视频", "", "视频文件 (*.mp4 *.avi *.mov *.mkv *.webm);;所有文件 (*.*)"
             )
             if file_path:
+                self.logger.info(f"选择插入视频: {file_path}")
                 self.insert_video_edit.setText(file_path)
 
     def start_processing(self):
         """开始处理"""
+        self.logger.info("UI: 用户点击开始处理按钮")
+
         # 验证输入
         if not self.input_edit.text():
+            self.logger.warning("UI: 未选择输入视频文件")
             QMessageBox.warning(self, "警告", "请选择输入视频文件！")
             return
 
         if not self.output_edit.text():
+            self.logger.warning("UI: 未选择输出视频文件")
             QMessageBox.warning(self, "警告", "请选择输出视频文件！")
             return
 
         # 获取当前标签页
         current_tab = self.tab_widget.currentIndex()
+        self.logger.debug(f"UI: 当前标签页索引: {current_tab}")
 
         if current_tab == 0:  # 图片水印
             if not self.watermark_edit.text():
@@ -458,12 +491,16 @@ class VideoWatermarkWindow(QMainWindow):
 
             task_type = 'insert'
 
+        self.logger.info(f"UI: 准备启动后台线程，任务类型: {task_type}")
+        self.logger.debug(f"UI: 参数: {params}")
+
         # 禁用处理按钮
         self.btn_process.setEnabled(False)
         self.btn_process.setText("⏳ 处理中...")
         self.status_bar.showMessage("正在处理...")
 
         # 启动处理线程
+        self.logger.info("UI: 启动处理线程")
         self.processing_thread = ProcessingThread(task_type, params)
         self.processing_thread.finished.connect(self.on_processing_finished)
         self.processing_thread.start()
@@ -474,9 +511,11 @@ class VideoWatermarkWindow(QMainWindow):
         self.btn_process.setText("🚀 开始处理")
 
         if success:
+            self.logger.info("UI: 处理成功")
             QMessageBox.information(self, "完成", message)
             self.status_bar.showMessage("处理完成")
         else:
+            self.logger.error(f"UI: 处理失败 - {message}")
             QMessageBox.critical(self, "错误", f"处理失败：{message}")
             self.status_bar.showMessage("处理失败")
 
@@ -493,6 +532,12 @@ class VideoWatermarkWindow(QMainWindow):
         """批量处理"""
         # TODO: 实现批量处理功能
         QMessageBox.information(self, "提示", "批量处理功能开发中...")
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        self.logger.info("UI: 用户关闭窗口")
+        self.logger.info("=" * 60)
+        event.accept()
 
 
 def main():

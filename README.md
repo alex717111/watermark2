@@ -272,6 +272,60 @@ python main.py insert \
   --crossfade 1.0
 ```
 
+## 日志功能
+
+所有命令（CLI和UI）都支持日志记录，日志文件自动保存在程序目录的 `logs/` 子目录中。
+
+### 查看日志文件
+
+```bash
+# 实时查看日志（Linux/macOS）
+tail -f logs/video_watermark.log
+
+# 或使用cat查看
+ cat logs/video_watermark.log
+```
+
+### 指定日志级别
+
+```bash
+# DEBUG级别（最详细，用于调试）
+python main.py watermark -i input.mp4 -o output.mp4 -w logo.png --log-level DEBUG
+
+# INFO级别（默认，记录关键信息）
+python main.py watermark -i input.mp4 -o output.mp4 -w logo.png --log-level INFO
+
+# WARNING级别（仅警告和错误）
+python main.py watermark -i input.mp4 -o output.mp4 -w logo.png --log-level WARNING
+
+# 支持的级别：DEBUG, INFO, WARNING, ERROR
+```
+
+### 日志输出示例
+
+```bash
+# 控制台输出（用户看到）
+正在添加水印到视频...
+  输入: video.mp4
+  水印: logo.png
+  模式: 全尺寸水印
+✅ 水印添加成功: output.mp4
+
+# 同时写入: logs/video_watermark.log
+# 2025-12-05 15:30:26 - video_watermark - INFO - 开始处理：图片水印
+# 2025-12-05 15:30:26 - video_watermark - INFO - 输入文件: video.mp4
+# 2025-12-05 15:30:26 - video_watermark - INFO - 水印文件: logo.png
+# 2025-12-05 15:30:26 - video_watermark - INFO - 模式: 全尺寸
+# 2025-12-05 15:30:45 - video_watermark - INFO - 处理完成
+```
+
+### 日志特性
+
+- ✅ **自动轮转**：单文件最大2MB，超过自动清空重新开始
+- ✅ **双输出**：同时输出到控制台和日志文件
+- ✅ **统一管理**：CLI和UI使用同一套日志系统
+- ✅ **UTF-8编码**：支持中文和特殊字符
+
 ## 版本更新说明
 
 ### 2025-12-05 重大更新：全尺寸水印成为默认行为
