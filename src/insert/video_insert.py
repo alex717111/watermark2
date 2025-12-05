@@ -3,9 +3,9 @@
 import os
 from typing import Optional
 
-from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
-from moviepy.audio.fx.all import audio_fadein, audio_fadeout
-from moviepy.video.fx.all import fadein, fadeout
+import click
+from moviepy import VideoFileClip, CompositeVideoClip, concatenate_videoclips
+from moviepy import afx, vfx
 
 
 def insert_video(
@@ -14,7 +14,8 @@ def insert_video(
     output_path: str,
     insert_position: float,
     audio_mode: str = 'keep',
-    crossfade_duration: float = 0.0
+    crossfade_duration: float = 0.0,
+    seamless: bool = True
 ) -> None:
     """将视频插入到主视频的指定位置
 
@@ -29,6 +30,7 @@ def insert_video(
                    'mix': 混合音频
                    'mute': 静音
         crossfade_duration: 交叉淡入淡出时长（秒）
+        seamless: 是否使用无缝插入模式（无过渡效果）[默认启用]
     """
     # 加载视频
     main_video = VideoFileClip(main_video_path)
@@ -42,22 +44,22 @@ def insert_video(
     click.echo(f'插入视频时长: {insert_video.duration:.2f}秒')
     
     # 分割主视频
-    before_clip = main_video.subclip(0, insert_position)
-    after_clip = main_video.subclip(insert_position)
+    before_clip = main_video.subclipped(0, insert_position)
+    after_clip = main_video.subclipped(insert_position)
     
     # 调整插入视频大小以匹配主视频
     if insert_video.size != main_video.size:
         click.echo(f'调整插入视频分辨率: {insert_video.size} -> {main_video.size}')
-        insert_video = insert_video.resize(main_video.size)
+        insert_video = insert_video.resized(main_video.size)
     
-    # 处理音频
-    if crossfade_duration > 0:
+    # 处理音频（仅在非无缝模式且需要交叉淡入淡出时）
+    if not seamless and crossfade_duration > 0:
         # 应用交叉淡入淡出效果
-        before_clip = before_clip.fx(audio_fadeout, crossfade_duration)
-        after_clip = after_clip.fx(audio_fadein, crossfade_duration)
-        insert_video = insert_video.fx(audio_fadein, crossfade_duration)
-        insert_video = insert_video.fx(audio_fadeout, crossfade_duration)
-    
+        before_clip = before_clip.with_effects([afx.AudioFadeOut(crossfade_duration)])
+        after_clip = after_clip.with_effects([afx.AudioFadeIn(crossfade_duration)])
+        insert_video = insert_video.with_effects([afx.AudioFadeIn(crossfade_duration)])
+        insert_video = insert_video.with_effects([afx.AudioFadeOut(crossfade_duration)])
+
     # 根据音频模式处理
     if audio_mode == 'keep':
         # 保留主视频音频
@@ -74,9 +76,9 @@ def insert_video(
     elif audio_mode == 'mix':
         # 混合音频 - 这里保留原音频，让MoviePy自动处理
         click.echo('混合音频模式：将自动混合主视频和插入视频的音频')
-    
+
     # 连接视频片段
-    if crossfade_duration > 0:
+    if not seamless and crossfade_duration > 0:
         # 使用交叉淡入淡出
         if audio_mode == 'mix':
             # 混合音频需要特殊处理
@@ -87,8 +89,8 @@ def insert_video(
             final_video = _create_fade_transition(
                 before_clip, insert_video, after_clip, crossfade_duration)
     else:
-        # 直接拼接
-        final_video = concatenate_videoclips([before_clip, insert_video, after_clip])
+        # 直接拼接（无缝模式或禁用交叉淡入淡出）
+        final_video = concatenate_videoclips([before_clip, insert_video, after_clip], method="compose")
     
     # 写出视频
     click.echo('正在生成输出视频...')
@@ -112,16 +114,15 @@ def _create_fade_transition(clip1, clip2, clip3, fade_duration):
     """创建交叉淡入淡出的视频过渡"""
     # 对clip1应用淡出
     if clip1.duration > 0:
-        clip1 = clip1.fx(fadeout, fade_duration)
-    
+        clip1 = clip1.with_effects([vfx.FadeOut(fade_duration)])
+
     # 对clip2应用淡入和淡出
     if clip2.duration > 0:
-        clip2 = clip2.fx(fadein, fade_duration)
-        clip2 = clip2.fx(fadeout, fade_duration)
-    
+        clip2 = clip2.with_effects([vfx.FadeIn(fade_duration), vfx.FadeOut(fade_duration)])
+
     # 对clip3应用淡入
     if clip3.duration > 0:
-        clip3 = clip3.fx(fadein, fade_duration)
+        clip3 = clip3.with_effects([vfx.FadeIn(fade_duration)])
     
     return concatenate_videoclips([clip1, clip2, clip3])
 

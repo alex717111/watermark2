@@ -4,10 +4,11 @@
 import sys
 import os
 
-# 将src目录添加到系统路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# 将项目根目录添加到系统路径
+sys.path.insert(0, os.path.dirname(__file__))
 
-from cli import cli
-
+# 使用 -m 参数运行src.cli模块来避免相对导入问题
 if __name__ == '__main__':
-    cli()
+    # 运行CLI模块
+    import runpy
+    runpy.run_module('src.cli', run_name='__main__')

@@ -3,8 +3,7 @@
 import os
 from typing import Optional, Tuple
 
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
-from moviepy.video.fx.all import mask_color
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip
 
 
 def add_image_watermark(
@@ -17,7 +16,8 @@ def add_image_watermark(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     width: Optional[int] = None,
-    height: Optional[int] = None
+    height: Optional[int] = None,
+    fullsize: bool = False
 ) -> None:
     """向视频添加图片水印
 
@@ -34,6 +34,8 @@ def add_image_watermark(
         end_time: 水印结束显示时间（秒），默认到视频结束
         width: 水印宽度（像素），保持宽高比
         height: 水印高度（像素），保持宽高比
+        fullsize: 全尺寸水印模式，水印图片将与视频同尺寸，使用水印本身的透明通道和位置
+                  为True时，position、margin、width、height参数将被忽略
     """
     # 加载视频
     video = VideoFileClip(video_path)
@@ -42,33 +44,42 @@ def add_image_watermark(
     watermark = ImageClip(watermark_path)
     
     # 调整水印大小
-    if width or height:
+    if fullsize:
+        # 全尺寸水印模式：水印图片必须与视频同尺寸
+        watermark = watermark.resized((video.w, video.h))
+    elif width or height:
+        # 自定义尺寸
         if width and height:
-            watermark = watermark.resize((width, height))
+            watermark = watermark.resized((width, height))
         elif width:
-            watermark = watermark.resize(width=width)
+            watermark = watermark.resized(width=width)
         else:
-            watermark = watermark.resize(height=height)
+            watermark = watermark.resized(height=height)
     else:
-        # 默认调整水印大小为视频宽度的1/8
-        watermark = watermark.resize(width=int(video.w / 8))
+        # 默认比例：调整为视频宽度的1/6（比1/8更大，更醒目）
+        watermark = watermark.resized(width=int(video.w / 6))
     
     # 设置水印持续时间
     if start_time is None:
         start_time = 0
     if end_time is None:
         end_time = video.duration
-    
-    watermark = watermark.set_start(start_time)
-    watermark = watermark.set_end(end_time)
-    watermark = watermark.set_duration(end_time - start_time)
-    
+
+    watermark = watermark.with_start(start_time)
+    watermark = watermark.with_end(end_time)
+    watermark = watermark.with_duration(end_time - start_time)
+
     # 设置水印位置
-    position_func = _get_position_function(video, watermark, position, margin)
-    watermark = watermark.set_position(position_func)
-    
+    if fullsize:
+        # 全尺寸水印：使用默认位置(0,0)，水印图片本身已包含位置信息
+        watermark = watermark.with_position((0, 0))
+    else:
+        # 普通水印：使用位置参数计算具体位置
+        position_func = _get_position_function(video, watermark, position, margin)
+        watermark = watermark.with_position(position_func)
+
     # 设置透明度
-    watermark = watermark.set_opacity(opacity)
+    watermark = watermark.with_opacity(opacity)
     
     # 合成视频
     final_video = CompositeVideoClip([video, watermark], size=video.size)

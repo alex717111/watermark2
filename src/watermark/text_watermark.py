@@ -3,7 +3,7 @@
 import os
 from typing import Optional, Tuple
 
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 
 def add_text_watermark(
@@ -45,8 +45,8 @@ def add_text_watermark(
     if font_path and os.path.exists(font_path):
         # 使用指定字体
         watermark = TextClip(
-            text,
-            fontsize=font_size,
+            text=text,
+            font_size=font_size,
             font=font_path,
             color=color,
             stroke_width=stroke_width,
@@ -55,8 +55,8 @@ def add_text_watermark(
     else:
         # 使用默认字体
         watermark = TextClip(
-            text,
-            fontsize=font_size,
+            text=text,
+            font_size=font_size,
             color=color,
             stroke_width=stroke_width,
             stroke_color=stroke_color
@@ -68,16 +68,16 @@ def add_text_watermark(
     if end_time is None:
         end_time = video.duration
     
-    watermark = watermark.set_start(start_time)
-    watermark = watermark.set_end(end_time)
-    watermark = watermark.set_duration(end_time - start_time)
+    watermark = watermark.with_start(start_time)
+    watermark = watermark.with_end(end_time)
+    watermark = watermark.with_duration(end_time - start_time)
     
     # 设置水印位置
     position_func = _get_position_function(video, watermark, position, margin=15)
-    watermark = watermark.set_position(position_func)
+    watermark = watermark.with_position(position_func)
     
     # 设置透明度
-    watermark = watermark.set_opacity(opacity)
+    watermark = watermark.with_opacity(opacity)
     
     # 合成视频
     final_video = CompositeVideoClip([video, watermark], size=video.size)

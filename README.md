@@ -72,33 +72,42 @@ pip install -r requirements.txt
 
 ### 1. 添加图片水印
 
+**默认模式（推荐）**：水印图片将与视频同尺寸，水印的透明度和位置由图片本身决定
 ```bash
-# 基本用法
-python main.py watermark -i input.mp4 -o output.mp4 -w logo.png
+# 基本用法（默认全尺寸模式）
+python main.py watermark -i input.mp4 -o output.mp4 -w watermark.png
+```
 
-# 自定义位置和透明度
+**缩放模式**（兼容旧版本）：将水印缩放到视频宽度的1/6，支持位置设置
+```bash
+# 使用缩放模式（类似旧版本行为）
 python main.py watermark \
   -i input.mp4 \
   -o output.mp4 \
   -w logo.png \
-  -p top-left \
-  --opacity 0.7 \
+  --scaled \
+  -p top-right \
   --margin 20
+```
 
-# 指定时间范围
+**其他常用参数：**
+```bash
+# 指定时间范围（在全尺寸和缩放模式下都有效）
 python main.py watermark \
   -i input.mp4 \
   -o output.mp4 \
-  -w logo.png \
+  -w watermark.png \
   --start-time 10 \
-  --end-time 60
+  --end-time 60 \
+  --opacity 0.9
 
-# 调整水印大小
+# 在缩放模式下自定义大小
 python main.py watermark \
   -i input.mp4 \
   -o output.mp4 \
   -w logo.png \
-  --width 200 \
+  --scaled \
+  --width 300 \
   --height 100
 ```
 
@@ -106,16 +115,23 @@ python main.py watermark \
 - `-i, --input`: 输入视频文件
 - `-o, --output`: 输出视频文件
 - `-w, --watermark`: 水印图片文件（支持PNG透明）
-- `-p, --position`: 水印位置，可选值：
+- `--scaled`: 使用缩放模式（可选），默认是全尺寸模式
+- `-p, --position`: 水印位置（仅在缩放模式下有效）
   - `top-left`, `top-center`, `top-right`
   - `center-left`, `center`, `center-right`
   - `bottom-left`, `bottom-center`, `bottom-right`（默认）
 - `--opacity`: 透明度 0.0-1.0（默认：0.8）
-- `--margin`: 边距像素（默认：10）
+- `--margin`: 边距像素（默认：10，仅在缩放模式下有效）
 - `--start-time`: 开始时间（秒或HH:MM:SS，默认：0）
 - `--end-time`: 结束时间（秒或HH:MM:SS，默认：视频结束）
-- `--width`: 水印宽度（像素）
-- `--height`: 水印高度（像素）
+- `--width`: 水印宽度（像素，仅在缩放模式下有效）
+- `--height`: 水印高度（像素，仅在缩放模式下有效）
+
+**全尺寸模式建议：**
+- 创建与视频同尺寸的PNG图片（如1920x1080）
+- 在图片编辑软件中设计水印位置和透明度
+- 支持复杂效果：渐变、阴影、多元素组合
+- 处理质量更高，无缩放失真
 
 ### 2. 添加文字水印
 
@@ -203,18 +219,36 @@ python main.py positions
 
 ## 示例
 
-### 示例1：给视频添加半透明logo
+### 示例1：使用全尺寸水印（默认，推荐）
 ```bash
+# 这是最简单的用法，fullsize_watermark.png与视频同尺寸
+python main.py watermark \
+  -i input.mp4 \
+  -o output_with_watermark.mp4 \
+  -w fullsize_watermark.png \
+  --opacity 0.9
+```
+**优点**：
+- 水印位置在图片中已精确设计
+- 支持复杂的视觉效果（渐变、阴影、多元素组合）
+- 处理质量更高（无缩放失真）
+- 使用简单，无需位置参数
+
+### 示例2：使用缩放模式（兼容简单logo）
+```bash
+# 如果水印是小logo，可以使用缩放模式
 python main.py watermark \
   -i input.mp4 \
   -o output_with_logo.mp4 \
   -w logo.png \
+  --scaled \
   -p bottom-right \
   --opacity 0.6 \
   --margin 20
 ```
+用于简单的logo或不需要复杂设计的水印。
 
-### 示例2：在视频开头添加版权声明
+### 示例3：在视频开头添加版权声明
 ```bash
 python main.py watermark-text \
   -i input.mp4 \

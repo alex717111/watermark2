@@ -40,23 +40,25 @@ def cli():
               help='输出视频文件路径')
 @click.option('--watermark', '-w', required=True, type=click.Path(exists=True),
               help='水印图片路径（支持PNG透明背景）')
+@click.option('--scaled', is_flag=True,
+              help='缩放模式：将水印缩放到视频宽度的1/6（兼容旧版本行为）')
 @click.option('--position', '-p', default='bottom-right',
               type=click.Choice(list(POSITIONS.keys()), case_sensitive=False),
-              help='水印位置（默认：bottom-right）')
+              help='水印位置（默认：bottom-right），在缩放模式下有效')
 @click.option('--opacity', type=click.FloatRange(0.0, 1.0), default=0.8,
               help='水印透明度 0.0-1.0（默认：0.8）')
 @click.option('--margin', type=int, default=10,
-              help='水印边距（像素，默认：10）')
+              help='水印边距（像素，默认：10），在缩放模式下有效')
 @click.option('--start-time', '-s', type=str, default='0',
               help='水印开始时间（秒或HH:MM:SS，默认：0）')
 @click.option('--end-time', '-e', type=str, default=None,
               help='水印结束时间（秒或HH:MM:SS，默认：视频结束）')
 @click.option('--width', type=int, default=None,
-              help='水印宽度（像素，保持宽高比）')
+              help='水印宽度（像素，保持宽高比），在缩放模式下有效')
 @click.option('--height', type=int, default=None,
-              help='水印高度（像素，保持宽高比）')
+              help='水印高度（像素，保持宽高比），在缩放模式下有效')
 def watermark(input, output, watermark, position, opacity, margin,
-              start_time, end_time, width, height):
+              start_time, end_time, width, height, scaled):
     """向视频添加图片水印"""
     try:
         # 检查输入文件
@@ -78,9 +80,16 @@ def watermark(input, output, watermark, position, opacity, margin,
         click.echo(f'正在添加水印到视频...')
         click.echo(f'  输入: {input}')
         click.echo(f'  水印: {watermark}')
-        click.echo(f'  位置: {position}')
+        # 显示模式信息
+        fullsize_mode = not scaled
+        if fullsize_mode:
+            click.echo(f'  模式: 全尺寸水印（直接叠加，使用水印本身的透明度和位置）')
+        else:
+            click.echo(f'  模式: 缩放模式（水印缩放到视频宽度的1/6）')
+            click.echo(f'  位置: {position}')
+        click.echo(f'  透明度: {opacity}')
         click.echo(f'  输出: {output}')
-        
+
         # 调用水印函数
         add_image_watermark(
             video_path=input,
@@ -92,7 +101,8 @@ def watermark(input, output, watermark, position, opacity, margin,
             start_time=start_sec,
             end_time=end_sec,
             width=width,
-            height=height
+            height=height,
+            fullsize=fullsize_mode
         )
         
         click.echo(f'✅ 水印添加成功: {output}')
@@ -191,8 +201,10 @@ def watermark_text(input, output, text, position, font_size, color, font,
               help='音频处理方式：keep（保留主音频）、replace（使用插入音频）、' +
                    'mix（混合音频）、mute（静音）')
 @click.option('--crossfade', type=click.FloatRange(0.0, 5.0), default=0.0,
-              help='交叉淡入淡出时长（秒，默认：0.0）')
-def insert(main, insert, output, position, audio_mode, crossfade):
+              help='交叉淡入淡出时长（秒）')
+@click.option('--seamless', is_flag=True, default=True,
+              help='无缝插入模式（无交叉淡入淡出，直接拼接）[默认启用]')
+def insert(main, insert, output, position, audio_mode, crossfade, seamless):
     """将视频插入到主视频的指定位置"""
     try:
         # 检查输入文件
@@ -200,17 +212,23 @@ def insert(main, insert, output, position, audio_mode, crossfade):
             if not os.path.isfile(f):
                 click.echo(f'错误：文件不存在: {f}', err=True)
                 sys.exit(1)
-        
+
         # 转换插入位置
         insert_pos = _time_str_to_seconds(position)
-        
+
         click.echo(f'正在插入视频...')
         click.echo(f'  主视频: {main}')
         click.echo(f'  插入视频: {insert}')
         click.echo(f'  位置: {position}（{insert_pos}秒）')
         click.echo(f'  音频模式: {audio_mode}')
+        if not seamless:
+            click.echo(f'  模式: 有缝插入（带过渡效果）')
+        elif crossfade > 0:
+            click.echo(f'  模式: 交叉淡入淡出（{crossfade}秒）')
+        else:
+            click.echo(f'  模式: 无缝插入（直接拼接）')
         click.echo(f'  输出: {output}')
-        
+
         # 调用视频插入函数
         insert_video(
             main_video_path=main,
@@ -218,11 +236,12 @@ def insert(main, insert, output, position, audio_mode, crossfade):
             output_path=output,
             insert_position=insert_pos,
             audio_mode=audio_mode,
-            crossfade_duration=crossfade
+            crossfade_duration=crossfade,
+            seamless=seamless
         )
-        
+
         click.echo(f'✅ 视频插入成功: {output}')
-        
+
     except Exception as e:
         click.echo(f'❌ 错误: {str(e)}', err=True)
         sys.exit(1)
