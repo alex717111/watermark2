@@ -70,3 +70,4 @@ tmp/
 # 项目特定
 resources/samples/
 *.db
+test_output/

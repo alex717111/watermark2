@@ -16,8 +16,7 @@ def add_image_watermark(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     width: Optional[int] = None,
-    height: Optional[int] = None,
-    fullsize: bool = False
+    height: Optional[int] = None
 ) -> None:
     """向视频添加图片水印
 
@@ -34,20 +33,15 @@ def add_image_watermark(
         end_time: 水印结束显示时间（秒），默认到视频结束
         width: 水印宽度（像素），保持宽高比
         height: 水印高度（像素），保持宽高比
-        fullsize: 全尺寸水印模式，水印图片将与视频同尺寸，使用水印本身的透明通道和位置
-                  为True时，position、margin、width、height参数将被忽略
     """
     # 加载视频
     video = VideoFileClip(video_path)
-    
+
     # 加载水印图片
     watermark = ImageClip(watermark_path)
-    
+
     # 调整水印大小
-    if fullsize:
-        # 全尺寸水印模式：水印图片必须与视频同尺寸
-        watermark = watermark.resized((video.w, video.h))
-    elif width or height:
+    if width or height:
         # 自定义尺寸
         if width and height:
             watermark = watermark.resized((width, height))
@@ -58,7 +52,7 @@ def add_image_watermark(
     else:
         # 默认比例：调整为视频宽度的1/6（比1/8更大，更醒目）
         watermark = watermark.resized(width=int(video.w / 6))
-    
+
     # 设置水印持续时间
     if start_time is None:
         start_time = 0
@@ -70,20 +64,15 @@ def add_image_watermark(
     watermark = watermark.with_duration(end_time - start_time)
 
     # 设置水印位置
-    if fullsize:
-        # 全尺寸水印：使用默认位置(0,0)，水印图片本身已包含位置信息
-        watermark = watermark.with_position((0, 0))
-    else:
-        # 普通水印：使用位置参数计算具体位置
-        position_func = _get_position_function(video, watermark, position, margin)
-        watermark = watermark.with_position(position_func)
+    position_func = _get_position_function(video, watermark, position, margin)
+    watermark = watermark.with_position(position_func)
 
     # 设置透明度
     watermark = watermark.with_opacity(opacity)
-    
+
     # 合成视频
     final_video = CompositeVideoClip([video, watermark], size=video.size)
-    
+
     # 写出视频
     # 使用原视频的编解码器参数
     final_video.write_videofile(
@@ -93,7 +82,7 @@ def add_image_watermark(
         threads=os.cpu_count(),
         logger=None  # 禁用日志输出
     )
-    
+
     # 释放资源
     video.close()
     watermark.close()

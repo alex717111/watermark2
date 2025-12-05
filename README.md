@@ -158,6 +158,14 @@ python main.py watermark-text \
   -t "特殊字体" \
   --font /path/to/font.ttf \
   --font-size 48
+
+# 调整垂直留空（避免字母上下延被截断）
+python main.py watermark-text \
+  -i input.mp4 \
+  -o output.mp4 \
+  -t "gjpqy Letters" \
+  --font-size 48 \
+  --vertical-margin 15
 ```
 
 **参数说明：**
@@ -167,6 +175,9 @@ python main.py watermark-text \
 - `--font`: 字体文件路径（TTF格式）
 - `--stroke-width`: 描边宽度（默认：1，0表示无描边）
 - `--stroke-color`: 描边颜色（默认：black）
+- `--vertical-margin`: 上下垂直留空（像素，默认：10），避免因字母上下延（g, j, p, q, y 等）被截断
+
+**提示**：如果文字水印的顶部或底部被截断（特别是包含 g, j, p, q, y 等字母时），请增加 `--vertical-margin` 参数的值。
 
 ### 3. 插入视频
 

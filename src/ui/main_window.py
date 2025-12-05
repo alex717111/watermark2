@@ -10,10 +10,11 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QLineEdit, QFileDialog, QMessageBox,
     QTabWidget, QGroupBox, QFormLayout, QSpinBox, QDoubleSpinBox,
     QComboBox, QCheckBox, QListWidget, QProgressBar, QTextEdit,
-    QSplitter, QFrame, QScrollArea
+    QSplitter, QFrame, QScrollArea, QStackedLayout
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMimeData
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QColor
+from PyQt6.QtWidgets import QColorDialog
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -21,8 +22,56 @@ from src.watermark import add_image_watermark, add_text_watermark
 from src.insert import insert_video
 from src.logger_config import setup_logger
 
+
+# 中文位置到元组的映射
+POSITION_MAP = {
+    '左上': ('left', 'top'),
+    '中上': ('center', 'top'),
+    '右上': ('right', 'top'),
+    '左中': ('left', 'center'),
+    '正中': ('center', 'center'),
+    '右中': ('right', 'center'),
+    '左下': ('left', 'bottom'),
+    '中下': ('center', 'bottom'),
+    '右下': ('right', 'bottom'),
+}
+
+
+def _convert_chinese_position(position_str):
+    """将UI的中文字符串转换为位置元组"""
+    if position_str in POSITION_MAP:
+        return POSITION_MAP[position_str]
+    # 如果已经是元组格式，直接返回
+    return position_str
+
 # 设置日志
 logger = setup_logger('video_watermark_ui')
+
+
+class ColorButton(QPushButton):
+    """颜色选择按钮"""
+
+    def __init__(self, color="#FFFFFF", parent=None):
+        super().__init__(parent)
+        self.color = QColor(color)
+        self.set_color(self.color)
+        self.clicked.connect(self.choose_color)
+
+    def set_color(self, color):
+        """设置颜色"""
+        self.color = QColor(color)
+        self.setStyleSheet(f"background-color: {self.color.name()}; border: 1px solid #555; min-height: 20px;")
+        self.setText(self.color.name())
+
+    def get_color(self):
+        """获取颜色名称"""
+        return self.color.name()
+
+    def choose_color(self):
+        """弹出颜色选择器"""
+        color = QColorDialog.getColor(self.color, self, "选择颜色")
+        if color.isValid():
+            self.set_color(color)
 
 
 class ProcessingThread(QThread):
@@ -79,25 +128,21 @@ class VideoWatermarkWindow(QMainWindow):
         self.logger.info("UI初始化完成")
 
     def init_ui(self):
-        """初始化UI"""
+        """初始化UI（简洁版）"""
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         # 主布局
-        main_layout = QHBoxLayout(central_widget)
+        self.main_layout = QVBoxLayout(central_widget)
+        self.main_layout.setSpacing(15)
 
-        # 左侧面板（功能选择）
-        left_panel = self.create_left_panel()
-        main_layout.addWidget(left_panel, 1)
+        # 功能选择（简化版）
+        self.create_function_selection()
 
-        # 中间面板（预览和参数）
-        center_panel = self.create_center_panel()
-        main_layout.addWidget(center_panel, 2)
-
-        # 右侧面板（批量队列）
-        right_panel = self.create_right_panel()
-        main_layout.addWidget(right_panel, 1)
+        # 主面板（中间的所有内容）
+        main_panel = self.create_main_panel()
+        self.main_layout.addWidget(main_panel)
 
         # 状态栏
         self.status_bar = self.statusBar()
@@ -106,71 +151,82 @@ class VideoWatermarkWindow(QMainWindow):
         # 设置窗口接受拖拽
         self.setAcceptDrops(True)
 
-    def create_left_panel(self):
-        """创建左侧面板"""
-        panel = QGroupBox("功能选择")
-        layout = QVBoxLayout()
+        # 初始化显示文字水印参数（默认功能）
+        self.on_function_changed(0)
 
-        # 图片水印按钮
-        self.btn_image_watermark = QPushButton("📷 图片水印")
-        self.btn_image_watermark.setCheckable(True)
-        self.btn_image_watermark.setChecked(True)
-        self.btn_image_watermark.clicked.connect(lambda: self.switch_tab(0))
-        layout.addWidget(self.btn_image_watermark)
+    def create_function_selection(self):
+        """创建功能选择区域（简化版） - 仅保留文字水印，隐藏选择控件"""
+        # 功能选择标签
+        func_label = QLabel("文字水印工具")
+        func_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #1976D2;")
+        self.main_layout.addWidget(func_label)
 
-        # 文字水印按钮
-        self.btn_text_watermark = QPushButton("📝 文字水印")
-        self.btn_text_watermark.setCheckable(True)
-        self.btn_text_watermark.clicked.connect(lambda: self.switch_tab(1))
-        layout.addWidget(self.btn_text_watermark)
+        # 隐藏功能选择下拉菜单（只保留文字水印，不需要切换）
+        self.function_combo = QComboBox()
+        self.function_combo.setMinimumHeight(40)
+        self.function_combo.addItems(["📝 文字水印"])  # 只保留文字水印
+        self.function_combo.setCurrentIndex(0)
+        self.function_combo.currentIndexChanged.connect(self.on_function_changed)
+        self.function_combo.setVisible(False)  # 隐藏下拉菜单
+        self.main_layout.addWidget(self.function_combo)
 
-        # 插入视频按钮
-        self.btn_insert_video = QPushButton("➕ 插入视频")
-        self.btn_insert_video.setCheckable(True)
-        self.btn_insert_video.clicked.connect(lambda: self.switch_tab(2))
-        layout.addWidget(self.btn_insert_video)
-
-        layout.addStretch()
-        panel.setLayout(layout)
-        return panel
-
-    def create_center_panel(self):
-        """创建中间面板"""
+    def create_main_panel(self):
+        """创建主面板（简洁版）"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        layout.setSpacing(15)
 
         # 文件选择区域
         file_group = self.create_file_selection_area()
         layout.addWidget(file_group)
 
-        # 标签页（不同功能的参数配置）
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabBarAutoHide(True)
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(separator)
 
-        # 图片水印标签页
+        # 功能参数配置
+        self.function_params_widget = QWidget()
+        self.function_params_layout = QStackedLayout(self.function_params_widget)
+
+        # 图片水印参数
         self.image_tab = self.create_image_watermark_tab()
-        self.tab_widget.addTab(self.image_tab, "图片水印")
+        self.function_params_layout.addWidget(self.image_tab)
 
-        # 文字水印标签页
+        # 文字水印参数
         self.text_tab = self.create_text_watermark_tab()
-        self.tab_widget.addTab(self.text_tab, "文字水印")
+        self.function_params_layout.addWidget(self.text_tab)
 
-        # 插入视频标签页
+        # 插入视频参数
         self.insert_tab = self.create_insert_video_tab()
-        self.tab_widget.addTab(self.insert_tab, "插入视频")
+        self.function_params_layout.addWidget(self.insert_tab)
 
-        layout.addWidget(self.tab_widget)
+        layout.addWidget(self.function_params_widget)
+
+        # 添加分隔线
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.Shape.HLine)
+        separator2.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(separator2)
+
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setToolTip("显示处理进度")
+        layout.addWidget(self.progress_bar)
 
         # 处理按钮
         self.btn_process = QPushButton("🚀 开始处理")
         self.btn_process.clicked.connect(self.start_processing)
+        self.btn_process.setMinimumHeight(45)
         self.btn_process.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
-                padding: 10px;
+                padding: 12px;
                 font-size: 16px;
                 font-weight: bold;
+                border-radius: 5px;
             }
             QPushButton:hover {
                 background-color: #45a049;
@@ -182,67 +238,6 @@ class VideoWatermarkWindow(QMainWindow):
         layout.addWidget(self.btn_process)
 
         return panel
-
-    def create_right_panel(self):
-        """创建右侧面板"""
-        panel = QGroupBox("批量处理队列")
-        layout = QVBoxLayout()
-
-        # 队列列表
-        self.queue_list = QListWidget()
-        self.queue_list.setAcceptDrops(True)
-        self.queue_list.setDefaultDropAction(Qt.DropAction.CopyAction)
-        layout.addWidget(self.queue_list)
-
-        # 队列操作按钮
-        btn_layout = QHBoxLayout()
-
-        self.btn_add_queue = QPushButton("➕ 添加到队列")
-        self.btn_add_queue.clicked.connect(self.add_to_queue)
-        btn_layout.addWidget(self.btn_add_queue)
-
-        self.btn_clear_queue = QPushButton("🗑️ 清空队列")
-        self.btn_clear_queue.clicked.connect(self.clear_queue)
-        btn_layout.addWidget(self.btn_clear_queue)
-
-        layout.addLayout(btn_layout)
-
-        # 批量处理按钮
-        self.btn_batch_process = QPushButton("📦 批量处理所有")
-        self.btn_batch_process.clicked.connect(self.batch_process)
-        layout.addWidget(self.btn_batch_process)
-
-        # 进度条
-        self.progress_bar = QProgressBar()
-        layout.addWidget(self.progress_bar)
-
-        # 取消按钮
-        self.btn_cancel = QPushButton("⏹️ 取消批量处理")
-        self.btn_cancel.clicked.connect(self.cancel_batch_process)
-        self.btn_cancel.setEnabled(False)
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                padding: 8px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #d32f2f;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        layout.addWidget(self.btn_cancel)
-
-        panel.setLayout(layout)
-        return panel
-
-    def clear_queue(self):
-        """清空队列"""
-        self.logger.info("UI: 清空队列")
-        self.queue_list.clear()
 
     def create_file_selection_area(self):
         """创建文件选择区域"""
@@ -347,9 +342,9 @@ class VideoWatermarkWindow(QMainWindow):
         self.font_size_spin.setValue(48)
         layout.addRow("字体大小：", self.font_size_spin)
 
-        # 文字颜色
-        self.color_edit = QLineEdit("white")
-        layout.addRow("文字颜色：", self.color_edit)
+        # 文字颜色（使用颜色选择器）
+        self.color_button = ColorButton("white")
+        layout.addRow("文字颜色：", self.color_button)
 
         # 描边宽度
         self.stroke_width_spin = QSpinBox()
@@ -357,9 +352,9 @@ class VideoWatermarkWindow(QMainWindow):
         self.stroke_width_spin.setValue(2)
         layout.addRow("描边宽度：", self.stroke_width_spin)
 
-        # 描边颜色
-        self.stroke_color_edit = QLineEdit("black")
-        layout.addRow("描边颜色：", self.stroke_color_edit)
+        # 描边颜色（使用颜色选择器）
+        self.stroke_color_button = ColorButton("black")
+        layout.addRow("描边颜色：", self.stroke_color_button)
 
         # 透明度
         self.text_opacity_spin = QDoubleSpinBox()
@@ -383,6 +378,14 @@ class VideoWatermarkWindow(QMainWindow):
         ])
         self.position_combo.setCurrentText("右下")  # 默认右下
         layout.addRow("水印位置：", self.position_combo)
+
+        # 垂直留空
+        self.vertical_margin_spin = QSpinBox()
+        self.vertical_margin_spin.setRange(0, 50)
+        self.vertical_margin_spin.setValue(10)
+        self.vertical_margin_spin.setSingleStep(5)
+        self.vertical_margin_spin.setSuffix(" 像素")
+        layout.addRow("垂直留空：", self.vertical_margin_spin)
 
         widget.setLayout(layout)
         return widget
@@ -413,19 +416,16 @@ class VideoWatermarkWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
-    def switch_tab(self, index):
-        """切换标签页"""
-        self.tab_widget.setCurrentIndex(index)
+    def on_function_changed(self, index):
+        """功能选择改变事件 - 简化版：只显示文字水印"""
+        self.logger.info(f"UI: 功能选择切换到索引: {index}")
+        # 只显示文字水印参数（索引1）
+        self.function_params_layout.setCurrentIndex(1)
 
-        # 更新按钮状态
-        buttons = [self.btn_image_watermark, self.btn_text_watermark, self.btn_insert_video]
-        for i, btn in enumerate(buttons):
-            btn.setChecked(i == index)
-
-        # 显示/隐藏水印文件选择
-        self.watermark_layout.itemAt(0).widget().setVisible(index == 0)
-        self.watermark_edit.setVisible(index == 0)
-        self.btn_browse_watermark.setVisible(index == 0)
+        # 隐藏水印文件选择相关控件
+        self.watermark_layout.itemAt(0).widget().setVisible(False)
+        self.watermark_edit.setVisible(False)
+        self.btn_browse_watermark.setVisible(False)
 
     def on_mode_changed(self, index):
         """处理模式切换"""
@@ -529,9 +529,9 @@ class VideoWatermarkWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "输入路径不存在！")
             return
 
-        # 获取当前标签页
-        current_tab = self.tab_widget.currentIndex()
-        self.logger.debug(f"UI: 当前标签页索引: {current_tab}")
+        # 获取当前功能索引
+        current_tab = self.function_params_layout.currentIndex()
+        self.logger.debug(f"UI: 当前功能索引: {current_tab}")
 
         # 处理单个文件
         if input_path.is_file():
@@ -628,11 +628,8 @@ class VideoWatermarkWindow(QMainWindow):
             # 禁用按钮
             self.btn_process.setEnabled(False)
             self.btn_process.setText("⏳ 批量处理中...")
-            self.btn_add_queue.setEnabled(False)
-            self.btn_clear_queue.setEnabled(False)
             self.btn_browse_input.setEnabled(False)
             self.btn_browse_folder.setEnabled(False)
-            self.btn_cancel.setEnabled(True)
             self.status_bar.showMessage("批量处理中...")
 
             # 清空进度条
@@ -670,16 +667,19 @@ class VideoWatermarkWindow(QMainWindow):
                         add_image_watermark(**params)
 
                     elif current_tab == 1:  # 文字水印
+                        position_str = self.position_combo.currentText()
+                        position_tuple = _convert_chinese_position(position_str)
                         params = {
                             'video_path': str(video_file),
                             'text': self.text_edit.text(),
                             'output_path': str(output_file_path),
                             'font_size': self.font_size_spin.value(),
-                            'color': self.color_edit.text(),
+                            'color': self.color_button.get_color(),  # 使用颜色选择器
                             'opacity': self.text_opacity_spin.value(),
                             'stroke_width': self.stroke_width_spin.value(),
-                            'stroke_color': self.stroke_color_edit.text(),
-                            'position': self.position_combo.currentText(),
+                            'stroke_color': self.stroke_color_button.get_color(),  # 使用颜色选择器
+                            'position': position_tuple,  # 使用转换后的元组
+                            'margin': self.vertical_margin_spin.value(),  # 参数名改为 margin（与新的 PIL 实现兼容）
                         }
                         if self.end_time_edit.text():
                             params['end_time'] = float(self.end_time_edit.text())
@@ -709,7 +709,7 @@ class VideoWatermarkWindow(QMainWindow):
                 QApplication.processEvents()  # 处理UI事件
 
             # 恢复按钮状态
-            self.restore_process_buttons()
+            self.restore_buttons()
 
             # 显示结果
             if self.cancel_requested:
@@ -737,234 +737,13 @@ class VideoWatermarkWindow(QMainWindow):
             QMessageBox.critical(self, "错误", f"处理失败：{message}")
             self.status_bar.showMessage("处理失败")
 
-    def add_to_queue(self):
-        """添加到队列"""
-        self.logger.info("UI: 用户点击添加到队列按钮")
-
-        input_path = self.input_edit.text()
-        if not input_path:
-            self.logger.warning("UI: 未选择输入文件或文件夹")
-            QMessageBox.warning(self, "警告", "请选择输入视频文件或文件夹！")
-            return
-
-        # 获取当前参数配置
-        current_tab = self.tab_widget.currentIndex()
-        task_name = f"{'图片水印' if current_tab == 0 else '文字水印' if current_tab == 1 else '插入视频'}"
-
-        # 检查输入是文件还是文件夹
-        if Path(input_path).is_file():
-            # 单个文件
-            self.queue_list.addItem(f"📄 {task_name}: {Path(input_path).name}")
-            self.logger.info(f"UI: 添加单个文件到队列 - {input_path}")
-        elif Path(input_path).is_dir():
-            # 文件夹 - 扫描视频文件并批量添加
-            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
-            video_files = []
-
-            for ext in video_extensions:
-                video_files.extend(Path(input_path).glob(f"*{ext}"))
-
-            if not video_files:
-                QMessageBox.warning(self, "警告", "文件夹中没有找到视频文件！")
-                return
-
-            for video_file in video_files:
-                self.queue_list.addItem(f"📁 {task_name}: {video_file.name}")
-
-            self.logger.info(f"UI: 添加文件夹到队列 - {input_path}, 共 {len(video_files)} 个视频文件")
-            QMessageBox.information(self, "提示", f"已添加 {len(video_files)} 个视频文件到队列")
-        else:
-            QMessageBox.warning(self, "警告", "输入路径不存在！")
-
-    def cancel_batch_process(self):
-        """取消批量处理"""
-        self.logger.info("UI: 用户点击取消批量处理按钮")
-        self.cancel_requested = True
-        self.btn_cancel.setEnabled(False)
-        self.btn_cancel.setText("⏹️ 正在取消...")
-        self.status_bar.showMessage("正在取消...")
-
-    def restore_process_buttons(self):
-        """恢复单个处理相关按钮状态"""
+    def restore_buttons(self):
+        """恢复所有按钮状态"""
         self.btn_process.setEnabled(True)
         self.btn_process.setText("🚀 开始处理")
-        self.btn_add_queue.setEnabled(True)
-        self.btn_clear_queue.setEnabled(True)
         self.btn_browse_input.setEnabled(True)
         self.btn_browse_folder.setEnabled(True)
-        self.btn_cancel.setEnabled(False)
-        self.cancel_cancel()
-
-    def restore_batch_buttons(self):
-        """恢复批量处理相关按钮状态"""
-        self.btn_batch_process.setEnabled(True)
-        self.btn_batch_process.setText("📦 批量处理所有")
-        self.btn_add_queue.setEnabled(True)
-        self.btn_clear_queue.setEnabled(True)
-        self.btn_browse_input.setEnabled(True)
-        self.btn_browse_folder.setEnabled(True)
-        self.btn_cancel.setEnabled(False)
-        self.cancel_cancel()
-
-    def cancel_cancel(self):
-        """重置取消相关状态"""
-        self.btn_cancel.setText("⏹️ 取消批量处理")
         self.cancel_requested = False
-
-    def batch_process(self):
-        """批量处理队列中的所有视频"""
-        self.logger.info("UI: 用户点击批量处理按钮")
-
-        # 检查队列是否为空
-        if self.queue_list.count() == 0:
-            QMessageBox.warning(self, "警告", "队列为空，请先添加视频到队列！")
-            self.logger.warning("UI: 队列为空，无法批量处理")
-            return
-
-        # 获取当前参数配置
-        current_tab = self.tab_widget.currentIndex()
-        self.logger.info(f"UI: 当前任务类型: {'图片水印' if current_tab == 0 else '文字水印' if current_tab == 1 else '插入视频'}")
-
-        # 验证共用参数
-        if current_tab == 0 and not self.watermark_edit.text():
-            QMessageBox.warning(self, "警告", "请选择水印图片文件！")
-            return
-
-        if current_tab == 1 and not self.text_edit.text():
-            QMessageBox.warning(self, "警告", "请输入水印文字！")
-            return
-
-        if current_tab == 2 and not self.insert_video_edit.text():
-            QMessageBox.warning(self, "警告", "请选择要插入的视频文件！")
-            return
-
-        # 重置取消标志
-        self.cancel_requested = False
-
-        # 禁用按钮
-        self.btn_batch_process.setEnabled(False)
-        self.btn_batch_process.setText("⏳ 批量处理中...")
-        self.btn_add_queue.setEnabled(False)
-        self.btn_clear_queue.setEnabled(False)
-        self.btn_browse_input.setEnabled(False)
-        self.btn_browse_folder.setEnabled(False)
-        self.btn_cancel.setEnabled(True)
-        self.status_bar.showMessage("批量处理中...")
-
-        # 清空进度条
-        self.progress_bar.setValue(0)
-
-        # 获取基础输入路径
-        base_input_path = self.input_edit.text()
-        if not base_input_path:
-            QMessageBox.warning(self, "警告", "没有选择基础输入路径！")
-            return
-
-        # 收集所有要处理的视频文件
-        video_files_to_process = []
-
-        # 检查基础输入是文件还是文件夹
-        if Path(base_input_path).is_file():
-            # 单个文件
-            video_files_to_process.append(Path(base_input_path))
-        elif Path(base_input_path).is_dir():
-            # 文件夹 - 扫描所有视频文件
-            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
-            for ext in video_extensions:
-                video_files_to_process.extend(Path(base_input_path).glob(f"*{ext}"))
-
-        if not video_files_to_process:
-            QMessageBox.warning(self, "警告", "没有找到任何视频文件！")
-            return
-
-        self.logger.info(f"UI: 准备批量处理 {len(video_files_to_process)} 个视频文件")
-
-        # 创建输出文件夹
-        output_folder = Path(self.output_edit.text())
-        output_folder.mkdir(parents=True, exist_ok=True)
-
-        # 批量处理每个视频
-        success_count = 0
-        fail_count = 0
-
-        for i, video_file in enumerate(video_files_to_process):
-            # 检查是否请求取消
-            if self.cancel_requested:
-                self.logger.info("UI: 用户请求取消批量处理")
-                self.status_bar.showMessage("批量处理已取消")
-                break
-
-            try:
-                self.logger.info(f"批量处理第 {i+1}/{len(video_files_to_process)} 个视频: {video_file}")
-                self.status_bar.showMessage(f"处理中: {video_file.name} ({i+1}/{len(video_files_to_process)})")
-
-                # 生成输出文件名
-                output_path = output_folder / f"{video_file.stem}_wmarked.mp4"
-
-                # 根据当前标签页准备参数
-                if current_tab == 0:  # 图片水印
-                    params = {
-                        'video_path': str(video_file),
-                        'watermark_path': self.watermark_edit.text(),
-                        'output_path': str(output_path),
-                        'opacity': self.opacity_spin.value(),
-                        'start_time': float(self.start_time_edit.text() or 0),
-                    }
-                    if self.end_time_edit.text():
-                        params['end_time'] = float(self.end_time_edit.text())
-                    add_image_watermark(**params)
-
-                elif current_tab == 1:  # 文字水印
-                    params = {
-                        'video_path': str(video_file),
-                        'text': self.text_edit.text(),
-                        'output_path': str(output_path),
-                        'font_size': self.font_size_spin.value(),
-                        'color': self.color_edit.text(),
-                        'opacity': self.text_opacity_spin.value(),
-                        'stroke_width': self.stroke_width_spin.value(),
-                        'stroke_color': self.stroke_color_edit.text(),
-                        'position': self.position_combo.currentText(),
-                    }
-                    add_text_watermark(**params)
-
-                else:  # 插入视频
-                    params = {
-                        'main_video_path': str(video_file),
-                        'insert_video_path': self.insert_video_edit.text(),
-                        'output_path': str(output_path),
-                        'insert_position': float(self.insert_position_edit.text()),
-                        'audio_mode': self.audio_mode_combo.currentText(),
-                    }
-                    insert_video(**params)
-
-                success_count += 1
-                self.logger.info(f"成功处理: {video_file.name}")
-
-            except Exception as e:
-                fail_count += 1
-                self.logger.exception(f"处理失败 {video_file.name}: {str(e)}")
-                QMessageBox.warning(self, "警告", f"处理失败: {video_file.name}\n错误: {str(e)}")
-
-            # 更新进度条
-            progress = int((i + 1) / len(video_files_to_process) * 100)
-            self.progress_bar.setValue(progress)
-            QApplication.processEvents()  # 处理UI事件
-
-        # 恢复按钮状态
-        self.restore_batch_buttons()
-
-        # 显示结果
-        if self.cancel_requested:
-            QMessageBox.information(self, "批量处理已取消", f"批量处理已取消！\n成功处理: {success_count} 个\n失败: {fail_count} 个")
-            self.status_bar.showMessage("批量处理已取消")
-            self.logger.info(f"UI: 批量处理取消, 成功: {success_count}, 失败: {fail_count}")
-        elif fail_count == 0:
-            QMessageBox.information(self, "完成", f"批量处理完成！\n成功: {success_count}/{len(video_files_to_process)}")
-            self.status_bar.showMessage("批量处理完成")
-        else:
-            QMessageBox.warning(self, "完成(有错误)", f"批量处理完成！\n成功: {success_count}\n失败: {fail_count}")
-            self.status_bar.showMessage(f"批量处理完成, {fail_count}个失败")
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -1006,11 +785,11 @@ class VideoWatermarkWindow(QMainWindow):
         """窗口关闭事件"""
         self.logger.info("UI: 用户关闭窗口")
 
-        # 如果有正在进行的批量处理，请求取消
-        if self.btn_batch_process.isEnabled() == False and self.cancel_requested == False:
-            self.logger.info("UI: 检测到正在进行的批量处理，请求取消")
+        # 如果有正在进行的处理，请求取消
+        if not self.btn_process.isEnabled() and not self.cancel_requested:
+            self.logger.info("UI: 检测到正在进行的处理，请求取消")
             self.cancel_requested = True
-            QMessageBox.information(self, "提示", "正在取消批量处理，请稍候...")
+            QMessageBox.information(self, "提示", "正在取消处理，请稍候...")
 
         self.logger.info("=" * 60)
         event.accept()

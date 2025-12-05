@@ -185,6 +185,13 @@ video-watermark-tool/
   - [x] 适配测试（test_cli.py）
   - [x] 编写迁移指南（BREAKING_CHANGES.md）
   - [x] 创建全尺寸水印工具（create_fullsize_watermark_demo.py）
+- [x] **优化文字水印功能**：增加垂直留空参数（2025-12-05）
+  - [x] 问题：文字水印上下被截断（g, j, p, q, y 等字母）
+  - [x] 方案：添加 vertical_margin 参数（默认 10 像素）
+  - [x] CLI接口：添加 `--vertical-margin` 选项
+  - [x] UI界面：添加垂直留空调节控件
+  - [x] 更新文档（README.md）
+  - [x] 向后兼容：默认值不影响现有功能
 - [ ] 使用实际视频文件测试全尺寸水印功能
 - [ ] 使用实际视频文件测试视频插入功能
 - [ ] 性能优化（大文件处理）

@@ -1,12 +1,14 @@
 """Command-line interface for video watermark tool."""
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 import click
 
-from .watermark import add_image_watermark, add_text_watermark
+from .watermark import add_image_watermark
+from .watermark.text_watermark_v2 import add_text_watermark as add_text_watermark_v2
 from .insert import insert_video
 from .logger_config import setup_logger, get_logger
 
@@ -44,27 +46,25 @@ def cli():
               help='输出视频文件路径')
 @click.option('--watermark', '-w', required=True, type=click.Path(exists=True),
               help='水印图片路径（支持PNG透明背景）')
-@click.option('--scaled', is_flag=True,
-              help='缩放模式：将水印缩放到视频宽度的1/6（兼容旧版本行为）')
 @click.option('--position', '-p', default='bottom-right',
               type=click.Choice(list(POSITIONS.keys()), case_sensitive=False),
-              help='水印位置（默认：bottom-right），在缩放模式下有效')
+              help='水印位置（默认：bottom-right）')
 @click.option('--opacity', type=click.FloatRange(0.0, 1.0), default=0.8,
               help='水印透明度 0.0-1.0（默认：0.8）')
 @click.option('--margin', type=int, default=10,
-              help='水印边距（像素，默认：10），在缩放模式下有效')
+              help='水印边距（像素，默认：10）')
 @click.option('--start-time', '-s', type=str, default='0',
               help='水印开始时间（秒或HH:MM:SS，默认：0）')
 @click.option('--end-time', '-e', type=str, default=None,
               help='水印结束时间（秒或HH:MM:SS，默认：视频结束）')
 @click.option('--width', type=int, default=None,
-              help='水印宽度（像素，保持宽高比），在缩放模式下有效')
+              help='水印宽度（像素，保持宽高比）')
 @click.option('--height', type=int, default=None,
-              help='水印高度（像素，保持宽高比），在缩放模式下有效')
+              help='水印高度（像素，保持宽高比）')
 @click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
               default='INFO', help='日志级别（默认：INFO）')
 def watermark(input, output, watermark, position, opacity, margin,
-              start_time, end_time, width, height, scaled, log_level):
+              start_time, end_time, width, height, log_level):
     """向视频添加图片水印"""
     # 设置日志级别
     logger.setLevel(getattr(logging, log_level))
@@ -102,19 +102,11 @@ def watermark(input, output, watermark, position, opacity, margin,
         click.echo(f'正在添加水印到视频...')
         click.echo(f'  输入: {input}')
         click.echo(f'  水印: {watermark}')
-        # 显示模式信息
-        fullsize_mode = not scaled
-        if fullsize_mode:
-            click.echo(f'  模式: 全尺寸水印（直接叠加，使用水印本身的透明度和位置）')
-        else:
-            click.echo(f'  模式: 缩放模式（水印缩放到视频宽度的1/6）')
-            click.echo(f'  位置: {position}')
+        click.echo(f'  位置: {position}')
         click.echo(f'  透明度: {opacity}')
         click.echo(f'  输出: {output}')
 
-        logger.info(f"模式: {'全尺寸' if fullsize_mode else '缩放'}")
-        if not fullsize_mode:
-            logger.info(f"位置: {position}")
+        logger.info(f"位置: {position}")
         logger.info(f"透明度: {opacity}")
         logger.info("开始调用处理函数...")
 
@@ -129,8 +121,7 @@ def watermark(input, output, watermark, position, opacity, margin,
             start_time=start_sec,
             end_time=end_sec,
             width=width,
-            height=height,
-            fullsize=fullsize_mode
+            height=height
         )
 
         logger.info("处理完成")
@@ -171,10 +162,12 @@ def watermark(input, output, watermark, position, opacity, margin,
               help='水印开始时间（秒或HH:MM:SS，默认：0）')
 @click.option('--end-time', '-e', type=str, default=None,
               help='水印结束时间（秒或HH:MM:SS，默认：视频结束）')
+@click.option('--vertical-margin', type=int, default=10,
+              help='上下垂直留空（像素，默认：10），避免字母上下延被截断')
 @click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
               default='INFO', help='日志级别（默认：INFO）')
 def watermark_text(input, output, text, position, font_size, color, font,
-                   opacity, stroke_width, stroke_color, start_time, end_time, log_level):
+                   opacity, stroke_width, stroke_color, start_time, end_time, vertical_margin, log_level):
     """向视频添加文字水印"""
     # 设置日志级别
     logger.setLevel(getattr(logging, log_level))
@@ -214,6 +207,7 @@ def watermark_text(input, output, text, position, font_size, color, font,
         click.echo(f'  文字: {text}')
         click.echo(f'  位置: {position}')
         click.echo(f'  大小: {font_size}px')
+        click.echo(f'  垂直留空: {vertical_margin}px')
         click.echo(f'  输出: {output}')
 
         logger.info(f"位置: {position}")
@@ -222,9 +216,10 @@ def watermark_text(input, output, text, position, font_size, color, font,
         if font:
             logger.info(f"字体: {font}")
         logger.info(f"透明度: {opacity}")
+        logger.info(f"垂直留空: {vertical_margin}px")
 
-        # 调用文字水印函数
-        add_text_watermark(
+        # 调用文字水印函数（使用PIL实现）
+        add_text_watermark_v2(
             video_path=input,
             text=text,
             output_path=output,
@@ -236,7 +231,8 @@ def watermark_text(input, output, text, position, font_size, color, font,
             stroke_width=stroke_width,
             stroke_color=stroke_color,
             start_time=start_sec,
-            end_time=end_sec
+            end_time=end_sec,
+            margin=vertical_margin
         )
 
         logger.info("处理完成")
