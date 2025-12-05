@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+.env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 测试输出
+*.mp4
+*.avi
+*.mov
+*.mkv
+output_*.png
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+temp/
+tmp/
+
+# 配置文件（敏感信息）
+*.env
+.env.local
+.env.*.local
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 不需要提交的大文件
+*.zip
+*.tar.gz
+*.rar
+
+# 项目特定
+resources/samples/
+*.db
