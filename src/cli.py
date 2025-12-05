@@ -294,5 +294,22 @@ def _time_str_to_seconds(time_str):
         raise ValueError(f'无效的时间格式: {time_str}')
 
 
+@cli.command()
+def ui():
+    """启动图形界面（PyQt6）"""
+    try:
+        from .ui_app import main as ui_main
+        ui_main()
+    except ImportError as e:
+        click.echo('❌ 错误: 无法启动UI界面', err=True)
+        click.echo(f'原因: {str(e)}', err=True)
+        click.echo('', err=True)
+        click.echo('解决方法:', err=True)
+        click.echo('  1. 确保已激活虚拟环境', err=True)
+        click.echo('  2. 安装PyQt6: pip install PyQt6', err=True)
+        click.echo('  3. 重新安装依赖: pip install -r requirements.txt', err=True)
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     cli()

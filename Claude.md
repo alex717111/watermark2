@@ -120,7 +120,11 @@ video-watermark-tool/
 ├── src/                          # 源代码
 │   ├── __init__.py
 │   ├── main.py                  # 主入口（使用runpy解决相对导入）
-│   ├── cli.py                   # CLI接口（Click框架）
+│   ├── cli.py                   # CLI接口（Click框架，新增ui命令）
+│   ├── ui_app.py                # UI应用入口
+│   ├── ui/                      # UI模块（PyQt6）
+│   │   ├── __init__.py
+│   │   └── main_window.py       # 主窗口实现
 │   ├── watermark/               # 水印模块
 │   │   ├── __init__.py
 │   │   ├── image_watermark.py   # 图片水印实现（支持全尺寸模式）
@@ -187,13 +191,19 @@ video-watermark-tool/
 - [ ] 错误处理和用户反馈优化
 - [ ] 添加日志系统
 
-### 第三阶段：UI开发
-- [ ] 选择UI框架（PyQt6推荐）
-- [ ] 设计界面布局
-- [ ] 实现文件拖拽和预览
-- [ ] 集成核心功能到UI
-- [ ] 添加可视化时间轴
+### 第三阶段：UI开发（进行中）
+- [x] 选择UI框架（PyQt6）
+- [x] 设计界面布局和基础组件
+- [x] 实现文件拖拽和选择功能
+- [x] 集成图片水印功能到UI
+- [x] 集成文字水印功能到UI
+- [x] 集成视频插入功能到UI
+- [x] 实现参数配置面板
+- [x] 添加CLI命令启动UI（python main.py ui）
+- [ ] 实现视频预览功能（首帧截图）
 - [ ] 实现批量处理队列
+- [ ] 添加可视化时间轴
+- [ ] 实现水印图片可视化编辑器
 
 ### 第四阶段：跨平台适配
 - [ ] Windows测试和打包
@@ -279,16 +289,19 @@ venv\Scripts\activate.bat  # Windows
 # 查看帮助
 python main.py --help
 
-# 添加图片水印（默认全尺寸模式，推荐使用与视频同尺寸的水印）
+# 启动图形界面（UI模式）
+python main.py ui
+
+# 命令行模式：添加图片水印（默认全尺寸模式，推荐使用与视频同尺寸的水印）
 python main.py watermark -i input.mp4 -o output.mp4 -w watermark.png
 
-# 添加图片水印（缩放模式，兼容简单logo）
+# 命令行模式：添加图片水印（缩放模式，兼容简单logo）
 python main.py watermark -i input.mp4 -o output.mp4 -w logo.png --scaled -p bottom-right
 
-# 添加文字水印
+# 命令行模式：添加文字水印
 python main.py watermark-text -i input.mp4 -o output.mp4 -t "Copyright"
 
-# 插入视频片段
+# 命令行模式：插入视频片段
 python main.py insert -m main.mp4 -i insert.mp4 -o output.mp4 -p 30
 ```
 
