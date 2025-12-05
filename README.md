@@ -455,3 +455,55 @@ MIT License
 ## 贡献
 
 欢迎提交Issue和Pull Request！
+
+## 项目打包
+
+### 打包整个项目（不包含.git）
+
+如果需要将整个项目打包分发（不包含git历史），可以使用以下命令：
+
+**Linux/macOS:**
+```bash
+# 方法1: 使用git archive（推荐）
+git archive --format=zip --output=video-watermark-tool.zip HEAD
+
+# 方法2: 使用tar排除.git目录
+tar -czf video-watermark-tool.tar.gz --exclude=.git *
+
+# 方法3: 使用zip命令
+zip -r video-watermark-tool.zip . -x "*.git*"
+```
+
+**Windows:**
+```powershell
+# PowerShell方法
+Compress-Archive -Path * -DestinationPath video-watermark-tool.zip
+# 注意：PowerShell Compress-Archive会自动排除.git目录
+
+# 或者使用7-Zip（如果已安装）
+7z a -tzip video-watermark-tool.zip . -xr!.git
+```
+
+```batch
+# CMD批处理方法（需要手动排除）
+@echo off
+setlocal enabledelayedexpansion
+
+set "zipfile=video-watermark-tool.zip"
+echo 正在打包项目，排除.git目录...
+
+:: 删除旧的zip文件
+if exist "%zipfile%" del "%zipfile%"
+
+:: 使用PowerShell打包（如果可用）
+powershell -Command "Get-ChildItem -Path '.' -Force | Where-Object { $_.Name -ne '.git' } | Compress-Archive -DestinationPath '%zipfile%' -Force"
+
+if errorlevel 1 (
+    echo ❌ 打包失败
+    echo 请手动使用7-Zip或其他工具打包，排除.git目录
+) else (
+    echo ✅ 打包完成: %zipfile%
+)
+```
+
+生成的 `video-watermark-tool.zip` 文件包含了完整的项目代码、资源文件和配置，可以在其他机器上解压后直接使用。
