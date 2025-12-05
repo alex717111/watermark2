@@ -368,6 +368,22 @@ class VideoWatermarkWindow(QMainWindow):
         self.text_opacity_spin.setSingleStep(0.1)
         layout.addRow("透明度：", self.text_opacity_spin)
 
+        # 位置选择
+        self.position_combo = QComboBox()
+        self.position_combo.addItems([
+            "左上",
+            "中上",
+            "右上",
+            "左中",
+            "正中",
+            "右中",
+            "左下",
+            "中下",
+            "右下"
+        ])
+        self.position_combo.setCurrentText("右下")  # 默认右下
+        layout.addRow("水印位置：", self.position_combo)
+
         widget.setLayout(layout)
         return widget
 
@@ -549,6 +565,7 @@ class VideoWatermarkWindow(QMainWindow):
                     'opacity': self.text_opacity_spin.value(),
                     'stroke_width': self.stroke_width_spin.value(),
                     'stroke_color': self.stroke_color_edit.text(),
+                    'position': self.position_combo.currentText(),
                 }
 
                 if self.end_time_edit.text():
@@ -662,6 +679,7 @@ class VideoWatermarkWindow(QMainWindow):
                             'opacity': self.text_opacity_spin.value(),
                             'stroke_width': self.stroke_width_spin.value(),
                             'stroke_color': self.stroke_color_edit.text(),
+                            'position': self.position_combo.currentText(),
                         }
                         if self.end_time_edit.text():
                             params['end_time'] = float(self.end_time_edit.text())
@@ -906,6 +924,7 @@ class VideoWatermarkWindow(QMainWindow):
                         'opacity': self.text_opacity_spin.value(),
                         'stroke_width': self.stroke_width_spin.value(),
                         'stroke_color': self.stroke_color_edit.text(),
+                        'position': self.position_combo.currentText(),
                     }
                     add_text_watermark(**params)
 

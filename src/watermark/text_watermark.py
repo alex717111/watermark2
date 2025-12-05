@@ -10,7 +10,7 @@ def add_text_watermark(
     video_path: str,
     text: str,
     output_path: str,
-    position: Tuple[str, str] = ('right', 'bottom'),
+    position: str = 'right',
     font_size: int = 24,
     color: str = 'white',
     font_path: Optional[str] = None,
@@ -26,9 +26,10 @@ def add_text_watermark(
         video_path: 输入视频文件路径
         text: 水印文字内容
         output_path: 输出视频文件路径
-        position: 水印位置，格式为(horizontal, vertical)
-                 horizontal: 'left', 'center', 'right'
-                 vertical: 'top', 'center', 'bottom'
+        position: 水印位置，支持：
+                 '左上', '中上', '右上',
+                 '左中', '正中', '右中',
+                 '左下', '中下', '右下'
         font_size: 字体大小（像素）
         color: 文字颜色（支持颜色名称或十六进制如#FF0000）
         font_path: 字体文件路径（TTF格式），默认使用系统字体
@@ -73,7 +74,9 @@ def add_text_watermark(
     watermark = watermark.with_duration(end_time - start_time)
     
     # 设置水印位置
-    position_func = _get_position_function(video, watermark, position, margin=15)
+    # 将中文位置转换为(horizontal, vertical)元组
+    position_tuple = _convert_position_to_tuple(position)
+    position_func = _get_position_function(video, watermark, position_tuple, margin=15)
     watermark = watermark.with_position(position_func)
     
     # 设置透明度
@@ -95,6 +98,37 @@ def add_text_watermark(
     video.close()
     watermark.close()
     final_video.close()
+
+
+def _convert_position_to_tuple(position: str):
+    """将中文位置字符串转换为(horizontal, vertical)元组
+
+    Args:
+        position: 中文位置字符串，如'左上'、'右下'等
+
+    Returns:
+        (horizontal, vertical)元组，horizontal: 'left'/'center'/'right'
+                               vertical: 'top'/'center'/'bottom'
+
+    Raises:
+        ValueError: 如果位置字符串不合法
+    """
+    position_map = {
+        '左上': ('left', 'top'),
+        '中上': ('center', 'top'),
+        '右上': ('right', 'top'),
+        '左中': ('left', 'center'),
+        '正中': ('center', 'center'),
+        '右中': ('right', 'center'),
+        '左下': ('left', 'bottom'),
+        '中下': ('center', 'bottom'),
+        '右下': ('right', 'bottom'),
+    }
+
+    if position not in position_map:
+        raise ValueError(f"未知的位置字符串: {position}。支持的值: {list(position_map.keys())}")
+
+    return position_map[position]
 
 
 def _get_position_function(
