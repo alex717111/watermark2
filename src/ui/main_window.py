@@ -66,6 +66,9 @@ class VideoWatermarkWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
         self.logger = logging.getLogger('video_watermark_ui')
 
+        # 取消标志
+        self.cancel_requested = False
+
         self.logger.info("=" * 60)
         self.logger.info("UI界面启动")
         self.logger.info(f"窗口大小: {self.size().width()}x{self.size().height()}")
@@ -99,6 +102,9 @@ class VideoWatermarkWindow(QMainWindow):
         # 状态栏
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("就绪")
+
+        # 设置窗口接受拖拽
+        self.setAcceptDrops(True)
 
     def create_left_panel(self):
         """创建左侧面板"""
@@ -210,12 +216,37 @@ class VideoWatermarkWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         layout.addWidget(self.progress_bar)
 
+        # 取消按钮
+        self.btn_cancel = QPushButton("⏹️ 取消批量处理")
+        self.btn_cancel.clicked.connect(self.cancel_batch_process)
+        self.btn_cancel.setEnabled(False)
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        layout.addWidget(self.btn_cancel)
+
         panel.setLayout(layout)
         return panel
 
+    def clear_queue(self):
+        """清空队列"""
+        self.logger.info("UI: 清空队列")
+        self.queue_list.clear()
+
     def create_file_selection_area(self):
         """创建文件选择区域"""
-        group = QGroupBox("文件选择（支持拖拽）")
+        group = QGroupBox("文件选择（支持拖拽文件或文件夹）")
         layout = QVBoxLayout()
 
         # 输入文件
@@ -223,12 +254,17 @@ class VideoWatermarkWindow(QMainWindow):
         input_layout.addWidget(QLabel("输入视频："))
         self.input_edit = QLineEdit()
         self.input_edit.setAcceptDrops(True)
-        self.input_edit.setPlaceholderText("拖拽视频文件到这里，或点击浏览...")
+        self.input_edit.setPlaceholderText("拖拽视频文件或文件夹到这里，或点击浏览...")
         input_layout.addWidget(self.input_edit)
 
         self.btn_browse_input = QPushButton("📁 浏览...")
         self.btn_browse_input.clicked.connect(lambda: self.browse_file('input'))
         input_layout.addWidget(self.btn_browse_input)
+
+        # 添加选择文件夹按钮
+        self.btn_browse_folder = QPushButton("📂 选择文件夹...")
+        self.btn_browse_folder.clicked.connect(lambda: self.browse_file('input_folder'))
+        input_layout.addWidget(self.btn_browse_folder)
 
         layout.addLayout(input_layout)
 
@@ -398,6 +434,20 @@ class VideoWatermarkWindow(QMainWindow):
                     self.output_edit.setText(str(output_path))
                     self.logger.info(f"自动生成输出路径: {output_path}")
 
+        elif file_type == 'input_folder':
+            folder_path = QFileDialog.getExistingDirectory(
+                self, "选择包含视频的文件夹"
+            )
+            if folder_path:
+                self.logger.info(f"选择输入文件夹: {folder_path}")
+                self.input_edit.setText(folder_path)
+                # 自动生成输出文件夹
+                if not self.output_edit.text():
+                    path = Path(folder_path)
+                    output_path = path.parent / f"{path.name}_wmarked"
+                    self.output_edit.setText(str(output_path))
+                    self.logger.info(f"自动生成输出文件夹: {output_path}")
+
         elif file_type == 'output':
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "选择输出视频", "", "MP4文件 (*.mp4);;所有文件 (*.*)"
@@ -429,81 +479,231 @@ class VideoWatermarkWindow(QMainWindow):
         # 验证输入
         if not self.input_edit.text():
             self.logger.warning("UI: 未选择输入视频文件")
-            QMessageBox.warning(self, "警告", "请选择输入视频文件！")
+            QMessageBox.warning(self, "警告", "请选择输入视频文件或文件夹！")
             return
 
-        if not self.output_edit.text():
-            self.logger.warning("UI: 未选择输出视频文件")
-            QMessageBox.warning(self, "警告", "请选择输出视频文件！")
+        input_path = Path(self.input_edit.text())
+
+        # 检查输入是文件还是文件夹
+        if input_path.is_file():
+            self.logger.debug("UI: 输入类型是单个文件")
+            # 检查输出路径是否设置
+            if not self.output_edit.text():
+                self.logger.warning("UI: 未选择输出视频文件")
+                QMessageBox.warning(self, "警告", "请选择输出视频文件路径！")
+                return
+            output_path = self.output_edit.text()
+        elif input_path.is_dir():
+            self.logger.debug("UI: 输入类型是文件夹")
+            # 自动生成输出文件夹路径
+            output_path = str(input_path.parent / f"{input_path.name}_wmarked")
+            msg = QMessageBox.question(
+                self,
+                "批量处理确认",
+                f"输入路径是一个文件夹: {input_path.name}\n"
+                f"将批量处理所有视频文件到: {Path(output_path).name}\n"
+                f"是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if msg != QMessageBox.StandardButton.Yes:
+                self.logger.info("UI: 用户取消批量处理")
+                return
+        else:
+            QMessageBox.warning(self, "警告", "输入路径不存在！")
             return
 
         # 获取当前标签页
         current_tab = self.tab_widget.currentIndex()
         self.logger.debug(f"UI: 当前标签页索引: {current_tab}")
 
-        if current_tab == 0:  # 图片水印
-            if not self.watermark_edit.text():
-                QMessageBox.warning(self, "警告", "请选择水印图片文件！")
+        # 处理单个文件
+        if input_path.is_file():
+            self.logger.debug("UI: 进入单文件处理模式")
+
+            if current_tab == 0:  # 图片水印
+                if not self.watermark_edit.text():
+                    QMessageBox.warning(self, "警告", "请选择水印图片文件！")
+                    return
+
+                params = {
+                    'video_path': str(input_path),
+                    'watermark_path': self.watermark_edit.text(),
+                    'output_path': output_path,
+                    'opacity': self.opacity_spin.value(),
+                    'start_time': float(self.start_time_edit.text() or 0),
+                }
+
+                if self.end_time_edit.text():
+                    params['end_time'] = float(self.end_time_edit.text())
+
+                task_type = 'watermark'
+
+            elif current_tab == 1:  # 文字水印
+                params = {
+                    'video_path': str(input_path),
+                    'text': self.text_edit.text(),
+                    'output_path': output_path,
+                    'font_size': self.font_size_spin.value(),
+                    'color': self.color_edit.text(),
+                    'opacity': self.text_opacity_spin.value(),
+                    'stroke_width': self.stroke_width_spin.value(),
+                    'stroke_color': self.stroke_color_edit.text(),
+                }
+
+                if self.end_time_edit.text():
+                    params['end_time'] = float(self.end_time_edit.text())
+
+                task_type = 'watermark_text'
+
+            else:  # 插入视频
+                if not self.insert_video_edit.text():
+                    QMessageBox.warning(self, "警告", "请选择要插入的视频文件！")
+                    return
+
+                params = {
+                    'main_video_path': str(input_path),
+                    'insert_video_path': self.insert_video_edit.text(),
+                    'output_path': output_path,
+                    'insert_position': float(self.insert_position_edit.text()),
+                    'audio_mode': self.audio_mode_combo.currentText(),
+                }
+
+                task_type = 'insert'
+
+            self.logger.info(f"UI: 准备启动后台线程，任务类型: {task_type}")
+            self.logger.debug(f"UI: 参数: {params}")
+
+            # 禁用处理按钮
+            self.btn_process.setEnabled(False)
+            self.btn_process.setText("⏳ 处理中...")
+            self.status_bar.showMessage("正在处理...")
+
+            # 启动处理线程
+            self.logger.info("UI: 启动处理线程")
+            self.processing_thread = ProcessingThread(task_type, params)
+            self.processing_thread.finished.connect(self.on_processing_finished)
+            self.processing_thread.start()
+
+        else:  # 处理文件夹
+            self.logger.debug("UI: 进入批量处理模式")
+
+            # 扫描文件夹中的视频文件
+            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
+            video_files_to_process = []
+
+            for ext in video_extensions:
+                video_files_to_process.extend(input_path.glob(f"*{ext}"))
+
+            if not video_files_to_process:
+                QMessageBox.warning(self, "警告", "文件夹中没有找到视频文件！")
                 return
 
-            params = {
-                'video_path': self.input_edit.text(),
-                'watermark_path': self.watermark_edit.text(),
-                'output_path': self.output_edit.text(),
-                'opacity': self.opacity_spin.value(),
-                'start_time': float(self.start_time_edit.text() or 0),
-            }
+            self.logger.info(f"UI: 找到 {len(video_files_to_process)} 个视频文件需要处理")
 
-            if self.end_time_edit.text():
-                params['end_time'] = float(self.end_time_edit.text())
+            # 确保输出文件夹存在
+            Path(output_path).mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"UI: 输出文件夹已创建/已存在: {output_path}")
 
-            task_type = 'watermark'
+            # 初始化批量处理状态
+            self.cancel_requested = False
 
-        elif current_tab == 1:  # 文字水印
-            params = {
-                'video_path': self.input_edit.text(),
-                'text': self.text_edit.text(),
-                'output_path': self.output_edit.text(),
-                'font_size': self.font_size_spin.value(),
-                'color': self.color_edit.text(),
-                'opacity': self.text_opacity_spin.value(),
-                'stroke_width': self.stroke_width_spin.value(),
-                'stroke_color': self.stroke_color_edit.text(),
-            }
+            # 禁用按钮
+            self.btn_process.setEnabled(False)
+            self.btn_process.setText("⏳ 批量处理中...")
+            self.btn_add_queue.setEnabled(False)
+            self.btn_clear_queue.setEnabled(False)
+            self.btn_browse_input.setEnabled(False)
+            self.btn_browse_folder.setEnabled(False)
+            self.btn_cancel.setEnabled(True)
+            self.status_bar.showMessage("批量处理中...")
 
-            if self.end_time_edit.text():
-                params['end_time'] = float(self.end_time_edit.text())
+            # 清空进度条
+            self.progress_bar.setValue(0)
 
-            task_type = 'watermark_text'
+            # 批量处理每个视频
+            success_count = 0
+            fail_count = 0
 
-        else:  # 插入视频
-            if not self.insert_video_edit.text():
-                QMessageBox.warning(self, "警告", "请选择要插入的视频文件！")
-                return
+            for i, video_file in enumerate(video_files_to_process):
+                # 检查是否请求取消
+                if self.cancel_requested:
+                    self.logger.info("UI: 用户请求取消批量处理")
+                    self.status_bar.showMessage("批量处理已取消")
+                    break
 
-            params = {
-                'main_video_path': self.input_edit.text(),
-                'insert_video_path': self.insert_video_edit.text(),
-                'output_path': self.output_edit.text(),
-                'insert_position': float(self.insert_position_edit.text()),
-                'audio_mode': self.audio_mode_combo.currentText(),
-            }
+                try:
+                    self.logger.info(f"处理第 {i+1}/{len(video_files_to_process)} 个视频: {video_file}")
+                    self.status_bar.showMessage(f"处理中: {video_file.name} ({i+1}/{len(video_files_to_process)})")
 
-            task_type = 'insert'
+                    # 生成输出文件名
+                    output_file_path = Path(output_path) / f"{video_file.stem}_wmarked.mp4"
 
-        self.logger.info(f"UI: 准备启动后台线程，任务类型: {task_type}")
-        self.logger.debug(f"UI: 参数: {params}")
+                    # 根据当前标签页准备参数并处理
+                    if current_tab == 0:  # 图片水印
+                        params = {
+                            'video_path': str(video_file),
+                            'watermark_path': self.watermark_edit.text(),
+                            'output_path': str(output_file_path),
+                            'opacity': self.opacity_spin.value(),
+                            'start_time': float(self.start_time_edit.text() or 0),
+                        }
+                        if self.end_time_edit.text():
+                            params['end_time'] = float(self.end_time_edit.text())
+                        add_image_watermark(**params)
 
-        # 禁用处理按钮
-        self.btn_process.setEnabled(False)
-        self.btn_process.setText("⏳ 处理中...")
-        self.status_bar.showMessage("正在处理...")
+                    elif current_tab == 1:  # 文字水印
+                        params = {
+                            'video_path': str(video_file),
+                            'text': self.text_edit.text(),
+                            'output_path': str(output_file_path),
+                            'font_size': self.font_size_spin.value(),
+                            'color': self.color_edit.text(),
+                            'opacity': self.text_opacity_spin.value(),
+                            'stroke_width': self.stroke_width_spin.value(),
+                            'stroke_color': self.stroke_color_edit.text(),
+                        }
+                        if self.end_time_edit.text():
+                            params['end_time'] = float(self.end_time_edit.text())
+                        add_text_watermark(**params)
 
-        # 启动处理线程
-        self.logger.info("UI: 启动处理线程")
-        self.processing_thread = ProcessingThread(task_type, params)
-        self.processing_thread.finished.connect(self.on_processing_finished)
-        self.processing_thread.start()
+                    else:  # 插入视频
+                        params = {
+                            'main_video_path': str(video_file),
+                            'insert_video_path': self.insert_video_edit.text(),
+                            'output_path': str(output_file_path),
+                            'insert_position': float(self.insert_position_edit.text()),
+                            'audio_mode': self.audio_mode_combo.currentText(),
+                        }
+                        insert_video(**params)
+
+                    success_count += 1
+                    self.logger.info(f"成功处理: {video_file.name}")
+
+                except Exception as e:
+                    fail_count += 1
+                    self.logger.exception(f"处理失败 {video_file.name}: {str(e)}")
+                    QMessageBox.warning(self, "警告", f"处理失败: {video_file.name}\n错误: {str(e)}")
+
+                # 更新进度条
+                progress = int((i + 1) / len(video_files_to_process) * 100)
+                self.progress_bar.setValue(progress)
+                QApplication.processEvents()  # 处理UI事件
+
+            # 恢复按钮状态
+            self.restore_process_buttons()
+
+            # 显示结果
+            if self.cancel_requested:
+                QMessageBox.information(self, "批量处理已取消", f"批量处理已取消！\n成功处理: {success_count} 个\n失败: {fail_count} 个")
+                self.status_bar.showMessage("批量处理已取消")
+                self.logger.info(f"UI: 批量处理取消, 成功: {success_count}, 失败: {fail_count}")
+            elif fail_count == 0:
+                QMessageBox.information(self, "完成", f"批量处理完成！\n成功: {success_count}/{len(video_files_to_process)}")
+                self.status_bar.showMessage("批量处理完成")
+            else:
+                QMessageBox.warning(self, "完成(有错误)", f"批量处理完成！\n成功: {success_count}\n失败: {fail_count}")
+                self.status_bar.showMessage(f"批量处理完成, {fail_count}个失败")
 
     def on_processing_finished(self, success, message):
         """处理完成回调"""
@@ -521,21 +721,278 @@ class VideoWatermarkWindow(QMainWindow):
 
     def add_to_queue(self):
         """添加到队列"""
-        # TODO: 实现添加到队列功能
-        QMessageBox.information(self, "提示", "批量处理功能开发中...")
+        self.logger.info("UI: 用户点击添加到队列按钮")
 
-    def clear_queue(self):
-        """清空队列"""
-        self.queue_list.clear()
+        input_path = self.input_edit.text()
+        if not input_path:
+            self.logger.warning("UI: 未选择输入文件或文件夹")
+            QMessageBox.warning(self, "警告", "请选择输入视频文件或文件夹！")
+            return
+
+        # 获取当前参数配置
+        current_tab = self.tab_widget.currentIndex()
+        task_name = f"{'图片水印' if current_tab == 0 else '文字水印' if current_tab == 1 else '插入视频'}"
+
+        # 检查输入是文件还是文件夹
+        if Path(input_path).is_file():
+            # 单个文件
+            self.queue_list.addItem(f"📄 {task_name}: {Path(input_path).name}")
+            self.logger.info(f"UI: 添加单个文件到队列 - {input_path}")
+        elif Path(input_path).is_dir():
+            # 文件夹 - 扫描视频文件并批量添加
+            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
+            video_files = []
+
+            for ext in video_extensions:
+                video_files.extend(Path(input_path).glob(f"*{ext}"))
+
+            if not video_files:
+                QMessageBox.warning(self, "警告", "文件夹中没有找到视频文件！")
+                return
+
+            for video_file in video_files:
+                self.queue_list.addItem(f"📁 {task_name}: {video_file.name}")
+
+            self.logger.info(f"UI: 添加文件夹到队列 - {input_path}, 共 {len(video_files)} 个视频文件")
+            QMessageBox.information(self, "提示", f"已添加 {len(video_files)} 个视频文件到队列")
+        else:
+            QMessageBox.warning(self, "警告", "输入路径不存在！")
+
+    def cancel_batch_process(self):
+        """取消批量处理"""
+        self.logger.info("UI: 用户点击取消批量处理按钮")
+        self.cancel_requested = True
+        self.btn_cancel.setEnabled(False)
+        self.btn_cancel.setText("⏹️ 正在取消...")
+        self.status_bar.showMessage("正在取消...")
+
+    def restore_process_buttons(self):
+        """恢复单个处理相关按钮状态"""
+        self.btn_process.setEnabled(True)
+        self.btn_process.setText("🚀 开始处理")
+        self.btn_add_queue.setEnabled(True)
+        self.btn_clear_queue.setEnabled(True)
+        self.btn_browse_input.setEnabled(True)
+        self.btn_browse_folder.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+        self.cancel_cancel()
+
+    def restore_batch_buttons(self):
+        """恢复批量处理相关按钮状态"""
+        self.btn_batch_process.setEnabled(True)
+        self.btn_batch_process.setText("📦 批量处理所有")
+        self.btn_add_queue.setEnabled(True)
+        self.btn_clear_queue.setEnabled(True)
+        self.btn_browse_input.setEnabled(True)
+        self.btn_browse_folder.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+        self.cancel_cancel()
+
+    def cancel_cancel(self):
+        """重置取消相关状态"""
+        self.btn_cancel.setText("⏹️ 取消批量处理")
+        self.cancel_requested = False
 
     def batch_process(self):
-        """批量处理"""
-        # TODO: 实现批量处理功能
-        QMessageBox.information(self, "提示", "批量处理功能开发中...")
+        """批量处理队列中的所有视频"""
+        self.logger.info("UI: 用户点击批量处理按钮")
+
+        # 检查队列是否为空
+        if self.queue_list.count() == 0:
+            QMessageBox.warning(self, "警告", "队列为空，请先添加视频到队列！")
+            self.logger.warning("UI: 队列为空，无法批量处理")
+            return
+
+        # 获取当前参数配置
+        current_tab = self.tab_widget.currentIndex()
+        self.logger.info(f"UI: 当前任务类型: {'图片水印' if current_tab == 0 else '文字水印' if current_tab == 1 else '插入视频'}")
+
+        # 验证共用参数
+        if current_tab == 0 and not self.watermark_edit.text():
+            QMessageBox.warning(self, "警告", "请选择水印图片文件！")
+            return
+
+        if current_tab == 1 and not self.text_edit.text():
+            QMessageBox.warning(self, "警告", "请输入水印文字！")
+            return
+
+        if current_tab == 2 and not self.insert_video_edit.text():
+            QMessageBox.warning(self, "警告", "请选择要插入的视频文件！")
+            return
+
+        # 重置取消标志
+        self.cancel_requested = False
+
+        # 禁用按钮
+        self.btn_batch_process.setEnabled(False)
+        self.btn_batch_process.setText("⏳ 批量处理中...")
+        self.btn_add_queue.setEnabled(False)
+        self.btn_clear_queue.setEnabled(False)
+        self.btn_browse_input.setEnabled(False)
+        self.btn_browse_folder.setEnabled(False)
+        self.btn_cancel.setEnabled(True)
+        self.status_bar.showMessage("批量处理中...")
+
+        # 清空进度条
+        self.progress_bar.setValue(0)
+
+        # 获取基础输入路径
+        base_input_path = self.input_edit.text()
+        if not base_input_path:
+            QMessageBox.warning(self, "警告", "没有选择基础输入路径！")
+            return
+
+        # 收集所有要处理的视频文件
+        video_files_to_process = []
+
+        # 检查基础输入是文件还是文件夹
+        if Path(base_input_path).is_file():
+            # 单个文件
+            video_files_to_process.append(Path(base_input_path))
+        elif Path(base_input_path).is_dir():
+            # 文件夹 - 扫描所有视频文件
+            video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
+            for ext in video_extensions:
+                video_files_to_process.extend(Path(base_input_path).glob(f"*{ext}"))
+
+        if not video_files_to_process:
+            QMessageBox.warning(self, "警告", "没有找到任何视频文件！")
+            return
+
+        self.logger.info(f"UI: 准备批量处理 {len(video_files_to_process)} 个视频文件")
+
+        # 创建输出文件夹
+        output_folder = Path(self.output_edit.text())
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        # 批量处理每个视频
+        success_count = 0
+        fail_count = 0
+
+        for i, video_file in enumerate(video_files_to_process):
+            # 检查是否请求取消
+            if self.cancel_requested:
+                self.logger.info("UI: 用户请求取消批量处理")
+                self.status_bar.showMessage("批量处理已取消")
+                break
+
+            try:
+                self.logger.info(f"批量处理第 {i+1}/{len(video_files_to_process)} 个视频: {video_file}")
+                self.status_bar.showMessage(f"处理中: {video_file.name} ({i+1}/{len(video_files_to_process)})")
+
+                # 生成输出文件名
+                output_path = output_folder / f"{video_file.stem}_wmarked.mp4"
+
+                # 根据当前标签页准备参数
+                if current_tab == 0:  # 图片水印
+                    params = {
+                        'video_path': str(video_file),
+                        'watermark_path': self.watermark_edit.text(),
+                        'output_path': str(output_path),
+                        'opacity': self.opacity_spin.value(),
+                        'start_time': float(self.start_time_edit.text() or 0),
+                    }
+                    if self.end_time_edit.text():
+                        params['end_time'] = float(self.end_time_edit.text())
+                    add_image_watermark(**params)
+
+                elif current_tab == 1:  # 文字水印
+                    params = {
+                        'video_path': str(video_file),
+                        'text': self.text_edit.text(),
+                        'output_path': str(output_path),
+                        'font_size': self.font_size_spin.value(),
+                        'color': self.color_edit.text(),
+                        'opacity': self.text_opacity_spin.value(),
+                        'stroke_width': self.stroke_width_spin.value(),
+                        'stroke_color': self.stroke_color_edit.text(),
+                    }
+                    add_text_watermark(**params)
+
+                else:  # 插入视频
+                    params = {
+                        'main_video_path': str(video_file),
+                        'insert_video_path': self.insert_video_edit.text(),
+                        'output_path': str(output_path),
+                        'insert_position': float(self.insert_position_edit.text()),
+                        'audio_mode': self.audio_mode_combo.currentText(),
+                    }
+                    insert_video(**params)
+
+                success_count += 1
+                self.logger.info(f"成功处理: {video_file.name}")
+
+            except Exception as e:
+                fail_count += 1
+                self.logger.exception(f"处理失败 {video_file.name}: {str(e)}")
+                QMessageBox.warning(self, "警告", f"处理失败: {video_file.name}\n错误: {str(e)}")
+
+            # 更新进度条
+            progress = int((i + 1) / len(video_files_to_process) * 100)
+            self.progress_bar.setValue(progress)
+            QApplication.processEvents()  # 处理UI事件
+
+        # 恢复按钮状态
+        self.restore_batch_buttons()
+
+        # 显示结果
+        if self.cancel_requested:
+            QMessageBox.information(self, "批量处理已取消", f"批量处理已取消！\n成功处理: {success_count} 个\n失败: {fail_count} 个")
+            self.status_bar.showMessage("批量处理已取消")
+            self.logger.info(f"UI: 批量处理取消, 成功: {success_count}, 失败: {fail_count}")
+        elif fail_count == 0:
+            QMessageBox.information(self, "完成", f"批量处理完成！\n成功: {success_count}/{len(video_files_to_process)}")
+            self.status_bar.showMessage("批量处理完成")
+        else:
+            QMessageBox.warning(self, "完成(有错误)", f"批量处理完成！\n成功: {success_count}\n失败: {fail_count}")
+            self.status_bar.showMessage(f"批量处理完成, {fail_count}个失败")
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        """拖拽放下事件"""
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            self.logger.info(f"拖拽接收到: {file_path}")
+
+            if Path(file_path).is_file():
+                # 单个文件
+                if file_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
+                    self.input_edit.setText(file_path)
+                    # 自动生成输出文件名
+                    if not self.output_edit.text():
+                        path = Path(file_path)
+                        output_path = path.parent / f"{path.stem}_wmarked.mp4"
+                        self.output_edit.setText(str(output_path))
+                    self.logger.info(f"拖拽设置输入文件: {file_path}")
+                else:
+                    QMessageBox.warning(self, "提示", "请选择视频文件！")
+
+            elif Path(file_path).is_dir():
+                # 文件夹
+                self.input_edit.setText(file_path)
+                # 自动生成输出文件夹
+                if not self.output_edit.text():
+                    path = Path(file_path)
+                    output_path = path.parent / f"{path.name}_wmarked"
+                    self.output_edit.setText(str(output_path))
+                self.logger.info(f"拖拽设置输入文件夹: {file_path}")
+                QMessageBox.information(self, "提示", f"已选择文件夹: {Path(file_path).name}\n将批量处理所有视频文件")
 
     def closeEvent(self, event):
         """窗口关闭事件"""
         self.logger.info("UI: 用户关闭窗口")
+
+        # 如果有正在进行的批量处理，请求取消
+        if self.btn_batch_process.isEnabled() == False and self.cancel_requested == False:
+            self.logger.info("UI: 检测到正在进行的批量处理，请求取消")
+            self.cancel_requested = True
+            QMessageBox.information(self, "提示", "正在取消批量处理，请稍候...")
+
         self.logger.info("=" * 60)
         event.accept()
 
