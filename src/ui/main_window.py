@@ -60,7 +60,8 @@ class ColorButton(QPushButton):
     def set_color(self, color):
         """设置颜色"""
         self.color = QColor(color)
-        self.setStyleSheet(f"background-color: {self.color.name()}; border: 1px solid #555; min-height: 20px;")
+        # 固定背景色为白色，固定字体颜色为黑色，确保任何颜色值都清晰可见
+        self.setStyleSheet("background-color: #FFFFFF; border: 1px solid #555; min-height: 20px; color: #000000;")
         self.setText(self.color.name())
 
     def get_color(self):
@@ -561,10 +562,10 @@ class VideoWatermarkWindow(QMainWindow):
                     'text': self.text_edit.text(),
                     'output_path': output_path,
                     'font_size': self.font_size_spin.value(),
-                    'color': self.color_edit.text(),
+                    'color': self.color_button.get_color(),
                     'opacity': self.text_opacity_spin.value(),
                     'stroke_width': self.stroke_width_spin.value(),
-                    'stroke_color': self.stroke_color_edit.text(),
+                    'stroke_color': self.stroke_color_button.get_color(),
                     'position': self.position_combo.currentText(),
                 }
 

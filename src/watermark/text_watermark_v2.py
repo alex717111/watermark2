@@ -1,6 +1,7 @@
 """文字水印功能模块 - 使用 PIL 生成文本图片"""
 
 import os
+import sys
 import tempfile
 from typing import Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
@@ -35,11 +36,52 @@ def create_text_image(
     if font_path and os.path.exists(font_path):
         font = ImageFont.truetype(font_path, font_size)
     else:
-        # 使用默认字体
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
-        except:
-            font = ImageFont.load_default()
+        # 使用系统默认字体（跨平台）
+        font = None
+        if os.name == 'nt':  # Windows
+            # 尝试多个常见的Windows字体
+            windows_fonts = [
+                "C:\\Windows\\Fonts\\arial.ttf",
+                "C:\\Windows\\Fonts\\segoeui.ttf",
+                "C:\\Windows\\Fonts\\calibri.ttf",
+                "C:\\Windows\\Fonts\\tahoma.ttf",
+                "C:\\Windows\\Fonts\\verdana.ttf"
+            ]
+            for win_font in windows_fonts:
+                try:
+                    font = ImageFont.truetype(win_font, font_size)
+                    break
+                except:
+                    continue
+        else:  # Linux/macOS
+            # 尝试多个常见的Linux字体
+            linux_fonts = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "/System/Library/Fonts/Arial.ttf"  # macOS
+            ]
+            for linux_font in linux_fonts:
+                try:
+                    font = ImageFont.truetype(linux_font, font_size)
+                    break
+                except:
+                    continue
+
+        # 如果都找不到，使用默认字体
+        if font is None:
+            try:
+                # 尝试从系统加载默认字体
+                font = ImageFont.load_default()
+                # 对于默认字体，我们无法控制大小，需要调整图像缩放
+                # 所以最好创建一个默认大小的字体然后缩放
+                if hasattr(font, 'size') and font.size != font_size:
+                    # 记录警告
+                    print(f"警告：使用默认字体，无法精确控制字体大小为{font_size}")
+            except:
+                # 最后的手段：创建位图字体
+                font = ImageFont.load_default()
 
     # 创建临时图像来测量文本尺寸
     temp_img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
