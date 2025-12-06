@@ -32,11 +32,17 @@ POSITIONS = {
 AUDIO_MODES = ['keep', 'replace', 'mix', 'mute']
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version='1.0.0', prog_name='Video Watermark Tool')
-def cli():
-    """视频水印工具 - 添加水印和插入视频片段"""
-    pass
+@click.pass_context
+def cli(ctx):
+    """视频水印工具 - 添加水印和插入视频片段
+
+    不输入任何命令将启动图形界面
+    """
+    # 如果没有提供子命令，启动 UI
+    if ctx.invoked_subcommand is None:
+        ui()
 
 
 @cli.command()

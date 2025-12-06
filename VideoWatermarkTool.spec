@@ -69,7 +69,22 @@ if binary_path and os.path.exists(binary_path):
     binaries.append((binary_path, './imageio_ffmpeg'))
 
 
-a = Analysis(
+# 为 UI 和 CLI 分别创建 Analysis
+a_ui = Analysis(
+    ['main_ui.py'],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+
+a_cli = Analysis(
     ['main.py'],
     pathex=[],
     binaries=binaries,
@@ -82,13 +97,16 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.datas,
+pyz_ui = PYZ(a_ui.pure)
+pyz_cli = PYZ(a_cli.pure)
+
+# UI 版本的 exe - 默认启动界面
+exe_ui = EXE(
+    pyz_ui,
+    a_ui.scripts,
+    a_ui.binaries,
+    a_ui.datas,
     [],
     name='VideoWatermarkTool',
     debug=False,
@@ -97,7 +115,29 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,  # UI 版本不显示控制台
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+# CLI 版本的 exe - 命令行工具
+exe_cli = EXE(
+    pyz_cli,
+    a_cli.scripts,
+    a_cli.binaries,
+    a_cli.datas,
+    [],
+    name='VideoWatermarkTool_CLI',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # CLI 版本显示控制台
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
