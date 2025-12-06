@@ -3,6 +3,7 @@
 import pytest
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 # 添加src到路径
@@ -15,16 +16,27 @@ from watermark.text_watermark_v2 import create_text_image
 @pytest.fixture
 def test_video():
     """创建测试视频"""
-    video_path = "/tmp/test_video.mp4"
+    # 使用跨平台的临时目录
+    temp_dir = tempfile.gettempdir()
+    video_path = os.path.join(temp_dir, "test_video.mp4")
+
     if not os.path.exists(video_path):
-        os.system(f'ffmpeg -f lavfi -i testsrc=duration=3:size=1280x720:rate=30 -y {video_path} 2>/dev/null')
+        # 跨平台的ffmpeg命令（隐藏输出）
+        if os.name == 'nt':  # Windows
+            null_output = "nul"
+            cmd = f'ffmpeg -f lavfi -i testsrc=duration=3:size=1280x720:rate=30 -y "{video_path}" 2>{null_output}'
+        else:  # Linux/macOS
+            null_output = "/dev/null"
+            cmd = f'ffmpeg -f lavfi -i testsrc=duration=3:size=1280x720:rate=30 -y "{video_path}" 2>{null_output}'
+        os.system(cmd)
     return video_path
 
 
 @pytest.fixture
 def output_dir():
     """创建输出目录"""
-    output_path = "/tmp/test_output"
+    # 使用跨平台的临时目录
+    output_path = os.path.join(tempfile.gettempdir(), "test_output")
     os.makedirs(output_path, exist_ok=True)
     return output_path
 

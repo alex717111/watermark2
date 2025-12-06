@@ -1,6 +1,7 @@
 """文字水印功能模块 - 使用 PIL 生成文本图片"""
 
 import os
+import tempfile
 from typing import Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
@@ -134,8 +135,10 @@ def add_text_watermark(
         bg_padding=20
     )
 
-    # 保存临时图片
-    temp_image_path = "/tmp/temp_text_watermark.png"
+    # 保存临时图片（跨平台兼容）
+    temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    temp_image_path = temp_file.name
+    temp_file.close()
     text_image.save(temp_image_path, "PNG")
 
     # 创建水印剪辑
