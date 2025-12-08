@@ -21,9 +21,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from src.watermark import add_image_watermark, add_text_watermark
 from src.insert import insert_video
 from src.logger_config import setup_logger
+from src.cli import POSITIONS
 
 
-# 中文位置到元组的映射
+# 中文位置到元组的映射（已弃用，仅用于旧数据兼容）
 POSITION_MAP = {
     '左上': ('left', 'top'),
     '中上': ('center', 'top'),
@@ -37,12 +38,14 @@ POSITION_MAP = {
 }
 
 
-def _convert_chinese_position(position_str):
-    """将UI的中文字符串转换为位置元组"""
-    if position_str in POSITION_MAP:
-        return POSITION_MAP[position_str]
-    # 如果已经是元组格式，直接返回
-    return position_str
+def _convert_position_value(position_value):
+    """将UI的英文位置值转换为位置元组"""
+    if position_value in POSITIONS:
+        return POSITIONS[position_value]
+    # 如果已经是元组格式（旧数据兼容）或中文（非常旧的UI），直接返回
+    if position_value in POSITION_MAP:
+        return POSITION_MAP[position_value]
+    return position_value
 
 # 设置日志
 logger = setup_logger('video_watermark_ui')
@@ -364,19 +367,21 @@ class VideoWatermarkWindow(QMainWindow):
         self.text_opacity_spin.setSingleStep(0.1)
         layout.addRow("透明度：", self.text_opacity_spin)
 
-        # 位置选择
+        # 位置选择（显示中文，内部使用英文值）
         self.position_combo = QComboBox()
-        self.position_combo.addItems([
-            "左上",
-            "中上",
-            "右上",
-            "左中",
-            "正中",
-            "右中",
-            "左下",
-            "中下",
-            "右下"
-        ])
+        position_items = [
+            ("左上", "top-left"),
+            ("中上", "top-center"),
+            ("右上", "top-right"),
+            ("左中", "center-left"),
+            ("正中", "center"),
+            ("右中", "center-right"),
+            ("左下", "bottom-left"),
+            ("中下", "bottom-center"),
+            ("右下", "bottom-right")
+        ]
+        for display_text, internal_value in position_items:
+            self.position_combo.addItem(display_text, internal_value)
         self.position_combo.setCurrentText("右下")  # 默认右下
         layout.addRow("水印位置：", self.position_combo)
 
@@ -543,12 +548,15 @@ class VideoWatermarkWindow(QMainWindow):
                     QMessageBox.warning(self, "警告", "请选择水印图片文件！")
                     return
 
+                position_value = self.position_combo.currentData()
+                position_tuple = _convert_position_value(position_value)
                 params = {
                     'video_path': str(input_path),
                     'watermark_path': self.watermark_edit.text(),
                     'output_path': output_path,
                     'opacity': self.opacity_spin.value(),
                     'start_time': float(self.start_time_edit.text() or 0),
+                    'position': position_tuple,
                 }
 
                 if self.end_time_edit.text():
@@ -557,6 +565,8 @@ class VideoWatermarkWindow(QMainWindow):
                 task_type = 'watermark'
 
             elif current_tab == 1:  # 文字水印
+                position_value = self.position_combo.currentData()
+                position_tuple = _convert_position_value(position_value)
                 params = {
                     'video_path': str(input_path),
                     'text': self.text_edit.text(),
@@ -566,7 +576,7 @@ class VideoWatermarkWindow(QMainWindow):
                     'opacity': self.text_opacity_spin.value(),
                     'stroke_width': self.stroke_width_spin.value(),
                     'stroke_color': self.stroke_color_button.get_color(),
-                    'position': self.position_combo.currentText(),
+                    'position': position_tuple,
                 }
 
                 if self.end_time_edit.text():
@@ -656,20 +666,23 @@ class VideoWatermarkWindow(QMainWindow):
 
                     # 根据当前标签页准备参数并处理
                     if current_tab == 0:  # 图片水印
+                        position_value = self.position_combo.currentData()
+                        position_tuple = _convert_position_value(position_value)
                         params = {
                             'video_path': str(video_file),
                             'watermark_path': self.watermark_edit.text(),
                             'output_path': str(output_file_path),
                             'opacity': self.opacity_spin.value(),
                             'start_time': float(self.start_time_edit.text() or 0),
+                            'position': position_tuple,
                         }
                         if self.end_time_edit.text():
                             params['end_time'] = float(self.end_time_edit.text())
                         add_image_watermark(**params)
 
                     elif current_tab == 1:  # 文字水印
-                        position_str = self.position_combo.currentText()
-                        position_tuple = _convert_chinese_position(position_str)
+                        position_value = self.position_combo.currentData()
+                        position_tuple = _convert_position_value(position_value)
                         params = {
                             'video_path': str(video_file),
                             'text': self.text_edit.text(),
