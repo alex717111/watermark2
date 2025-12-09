@@ -37,9 +37,13 @@ os.makedirs(TEST_OUTPUT_DIR, exist_ok=True)
 OUTPUT_VIDEO_WATERMARK = os.path.join(TEST_OUTPUT_DIR, 'output_watermark.mp4')
 OUTPUT_VIDEO_TEXT = os.path.join(TEST_OUTPUT_DIR, 'output_text.mp4')
 OUTPUT_VIDEO_INSERT = os.path.join(TEST_OUTPUT_DIR, 'output_insert.mp4')
+OUTPUT_VIDEO_COMBO_TEXT = os.path.join(TEST_OUTPUT_DIR, 'output_combo_text.mp4')
+OUTPUT_VIDEO_COMBO_LOGO = os.path.join(TEST_OUTPUT_DIR, 'output_combo_logo.mp4')
+OUTPUT_VIDEO_COMBO_SCALE = os.path.join(TEST_OUTPUT_DIR, 'output_combo_scale.mp4')
 TEST_VIDEO = os.path.join(TEST_OUTPUT_DIR, 'test_video.mp4')
 TEST_WATERMARK = os.path.join(TEST_OUTPUT_DIR, 'test_watermark.png')
 TEST_INSERT_VIDEO = os.path.join(TEST_OUTPUT_DIR, 'test_insert.mp4')
+TEST_LOGO = os.path.join(TEST_OUTPUT_DIR, 'test_logo.png')
 
 
 # =======================================
@@ -93,6 +97,18 @@ def test_insert_help():
     assert result.exit_code == 0
     assert '--main' in result.output
     assert '--insert' in result.output
+
+
+def test_watermark_combo_help():
+    """测试组合水印命令帮助"""
+    from src.cli import cli
+    runner = CliRunner()
+    result = runner.invoke(cli, ['watermark-combo', '--help'])
+    assert result.exit_code == 0
+    assert '--text' in result.output
+    assert '必需' in result.output or 'required' in result.output.lower()
+    assert '--watermark' in result.output
+    assert '--logo-scale-factor' in result.output
 
 
 # =======================================
@@ -182,6 +198,41 @@ def create_fullsize_watermark(video_path, output_path):
 
     img.save(output_path)
     print(f"✅ 创建全尺寸水印: {output_path} ({width}x{height})")
+
+
+def create_test_logo(output_path, size=100):
+    """创建测试Logo图片"""
+    from PIL import Image, ImageDraw, ImageFont
+
+    # 创建方形Logo
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # 绘制圆形Logo（类似频道Logo）
+    margin = 10
+    draw.ellipse(
+        [(margin, margin), (size-margin, size-margin)],
+        fill='red',
+        outline='white',
+        width=3
+    )
+
+    # 添加文字"L"
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", size//2)
+    except:
+        font = ImageFont.load_default()
+
+    text = "L"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (size - text_width) // 2
+    y = (size - text_height) // 2
+    draw.text((x, y), text, fill='white', font=font)
+
+    img.save(output_path)
+    print(f"✅ 创建测试Logo: {output_path} ({size}x{size})")
 
 
 def test_functional_watermark():
@@ -330,6 +381,365 @@ def test_functional_insert():
         print(f"输出: {result.output}")
 
 
+def test_functional_watermark_combo_text():
+    """功能测试：组合水印 - 仅文字"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - 仅文字")
+    print("="*60)
+
+    # 删除旧文件
+    if os.path.exists(OUTPUT_VIDEO_COMBO_TEXT):
+        os.remove(OUTPUT_VIDEO_COMBO_TEXT)
+
+    # 使用之前创建的测试视频
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+
+    # 运行组合水印命令（仅文字，无logo）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', OUTPUT_VIDEO_COMBO_TEXT,
+        '--text', 'Test Video',
+        '--font-size', '48',
+        '--color', 'yellow',
+        '--text-position', 'center',
+        '--text-opacity', '0.9'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(OUTPUT_VIDEO_COMBO_TEXT):
+            file_size = os.path.getsize(OUTPUT_VIDEO_COMBO_TEXT)
+            print(f"✅ 组合水印（仅文字）添加成功: {OUTPUT_VIDEO_COMBO_TEXT}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_logo():
+    """功能测试：组合水印 - Logo + 文字（合并模式）"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - Logo + 文字（合并模式）")
+    print("="*60)
+
+    # 删除旧文件
+    for f in [TEST_LOGO, OUTPUT_VIDEO_COMBO_LOGO]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    # 使用之前创建的测试视频
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+
+    # 创建测试Logo
+    create_test_logo(TEST_LOGO, size=100)
+
+    # 运行组合水印命令（合并模式，水平排列）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', OUTPUT_VIDEO_COMBO_LOGO,
+        '--watermark', TEST_LOGO,
+        '--text', 'Copyright 2025',
+        '--font-size', '36',
+        '--color', 'white',
+        '--combine-mode',  # 启用合并模式
+        '--combine-layout', 'horizontal',  # 水平排列
+        '--logo-position', 'bottom-right',  # 整体位置
+        '--logo-opacity', '0.9',
+        '--stroke-width', '1',
+        '--stroke-color', 'black'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(OUTPUT_VIDEO_COMBO_LOGO):
+            file_size = os.path.getsize(OUTPUT_VIDEO_COMBO_LOGO)
+            print(f"✅ 组合水印（Logo + 文字，合并模式）添加成功: {OUTPUT_VIDEO_COMBO_LOGO}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo应在文字左侧，并自动缩放匹配文字高度")
+            print(f"👉 Logo和文字作为一个整体，位于视频右下方")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_separate():
+    """功能测试：组合水印 - Logo和文字分离定位（高级模式）"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - 分离模式（Logo和文字分别定位）")
+    print("="*60)
+
+    # 删除旧文件
+    output_path = os.path.join(TEST_OUTPUT_DIR, 'output_combo_separate.mp4')
+    if os.path.exists(output_path):
+        os.remove(output_path)
+
+    # 使用之前创建的测试视频和Logo
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+
+    # 运行组合水印命令（分离模式，分别定位）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', output_path,
+        '--watermark', TEST_LOGO,
+        '--logo-position', 'top-left',      # Logo在左上
+        '--logo-opacity', '0.8',
+        '--text', 'Watermark Text',
+        '--font-size', '36',
+        '--color', 'yellow',
+        '--text-position', 'bottom-right',  # 文字在右下
+        '--text-opacity', '0.9'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            print(f"✅ 组合水印（分离模式）添加成功: {output_path}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo在左上，文字在右下（分别定位）")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_combined():
+    """功能测试：组合水印 - 合并模式（推荐）"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - 合并模式（水平排列）")
+    print("="*60)
+
+    # 删除旧文件
+    for f in [TEST_LOGO, OUTPUT_VIDEO_COMBO_SCALE]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    # 使用之前创建的测试视频
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+
+    # 创建测试Logo
+    create_test_logo(TEST_LOGO, size=100)
+
+    # 运行组合水印命令（合并模式）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', OUTPUT_VIDEO_COMBO_SCALE,
+        '--watermark', TEST_LOGO,
+        '--text', 'Logo + Text Combined',
+        '--combine-mode',  # 启用合并模式
+        '--combine-layout', 'horizontal',  # 水平排列
+        '--logo-position', 'bottom-left',
+        '--font-size', '36',
+        '--color', 'white',
+        '--logo-scale-factor', '1.2'  # Logo比文字高20%
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(OUTPUT_VIDEO_COMBO_SCALE):
+            file_size = os.path.getsize(OUTPUT_VIDEO_COMBO_SCALE)
+            print(f"✅ 组合水印（合并模式）添加成功: {OUTPUT_VIDEO_COMBO_SCALE}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo应在文字左侧，并自动匹配文字高度")
+            print(f"👉 Logo高度应比文字高20%")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_combined_custom():
+    """功能测试：组合水印 - 合并模式（自定义缩放和间距）"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - 合并模式（自定义缩放和间距）")
+    print("="*60)
+
+    # 删除旧文件
+    output_path = os.path.join(TEST_OUTPUT_DIR, 'output_combo_custom.mp4')
+    if os.path.exists(output_path):
+        os.remove(output_path)
+
+    # 使用之前创建的测试视频和Logo
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+
+    # 运行组合水印命令（自定义缩放和间距）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', output_path,
+        '--watermark', TEST_LOGO,
+        '--text', 'Custom Spacing Test',
+        '--combine-mode',  # 启用合并模式
+        '--logo-scale-factor', '1.3',  # Logo比文字高30%
+        '--combine-spacing', '25',     # 25像素间距
+        '--font-size', '32',
+        '--color', 'cyan',
+        '--logo-position', 'top-left'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            print(f"✅ 组合水印（自定义样式）添加成功: {output_path}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo应比文字高30%")
+            print(f"👉 Logo和文字间距应为25像素")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_scale():
+    """功能测试：组合水印 - Logo缩放因子（分离模式）"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - Logo缩放1.5倍（分离模式）")
+    print("="*60)
+
+    # 删除旧文件
+    output_path = os.path.join(TEST_OUTPUT_DIR, 'output_combo_scale_sep.mp4')
+    if os.path.exists(output_path):
+        os.remove(output_path)
+
+    # 使用之前创建的测试视频和Logo
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+    if not os.path.exists(TEST_LOGO):
+        create_test_logo(TEST_LOGO, size=100)
+
+    # 运行组合水印命令（使用1.5倍缩放，分离模式）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', output_path,
+        '--watermark', TEST_LOGO,
+        '--logo-scale-factor', '1.5',
+        '--logo-position', 'top-right',
+        '--text', 'Large Logo Test',
+        '--font-size', '24',
+        '--color', 'cyan',
+        '--text-position', 'bottom-left'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            print(f"✅ 组合水印（缩放1.5倍）添加成功: {output_path}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo应比文字高50%")
+            print(f"👉 Logo在右上，文字在左下")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
+def test_functional_watermark_combo_combined_vertical():
+    """功能测试：组合水印 - 垂直合并模式"""
+    from src.cli import cli
+    runner = CliRunner()
+
+    print("\n" + "="*60)
+    print("功能测试：组合水印 - 垂直合并模式")
+    print("="*60)
+
+    # 删除旧文件
+    output_path = os.path.join(TEST_OUTPUT_DIR, 'output_combo_vertical.mp4')
+    if os.path.exists(output_path):
+        os.remove(output_path)
+
+    # 使用之前创建的测试视频和Logo
+    if not os.path.exists(TEST_VIDEO):
+        create_test_video(TEST_VIDEO, duration=3)
+    if not os.path.exists(TEST_LOGO):
+        create_test_logo(TEST_LOGO, size=100)
+
+    # 运行组合水印命令（垂直合并模式）
+    result = runner.invoke(cli, [
+        'watermark-combo',
+        '--input', TEST_VIDEO,
+        '--output', output_path,
+        '--watermark', TEST_LOGO,
+        '--text', 'Vertical Layout',
+        '--combine-mode',  # 启用合并模式
+        '--combine-layout', 'vertical',  # 垂直排列
+        '--logo-position', 'center',
+        '--font-size', '28',
+        '--color', 'yellow'
+    ])
+
+    # 检查结果
+    if result.exit_code == 0:
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            print(f"✅ 组合水印（垂直合并）添加成功: {output_path}")
+            print(f"📁 文件大小: {file_size / 1024:.2f} KB")
+            print(f"👉 Logo应在文字上方，垂直排列")
+            print(f"👉 请手动播放查看效果")
+        else:
+            print(f"❌ 输出文件未生成")
+            print(result.output)
+    else:
+        print(f"❌ 组合水印命令失败")
+        print(f"返回码: {result.exit_code}")
+        print(f"输出: {result.output}")
+
+
 # =======================================
 # 主函数：运行所有测试
 # =======================================
@@ -358,6 +768,8 @@ if __name__ == '__main__':
         print("✅ 测试4通过: watermark-text帮助命令")
         test_insert_help()
         print("✅ 测试5通过: insert帮助命令")
+        test_watermark_combo_help()
+        print("✅ 测试6通过: watermark-combo帮助命令")
     except Exception as e:
         print(f"❌ 单元测试失败: {e}")
         sys.exit(1)
@@ -376,6 +788,13 @@ if __name__ == '__main__':
             test_functional_watermark()
             test_functional_watermark_text()
             test_functional_insert()
+            test_functional_watermark_combo_text()
+            test_functional_watermark_combo_logo()
+            test_functional_watermark_combo_combined()  # 合并模式（推荐）
+            test_functional_watermark_combo_combined_vertical()  # 垂直合并
+            test_functional_watermark_combo_combined_custom()  # 自定义缩放和间距
+            test_functional_watermark_combo_separate()  # 分离模式（高级）
+            test_functional_watermark_combo_scale()  # 分离模式缩放测试
         except Exception as e:
             print(f"❌ 功能测试失败: {e}")
 
@@ -387,6 +806,8 @@ if __name__ == '__main__':
         print(f"✅ {TEST_VIDEO} - 测试视频（3秒）")
     if os.path.exists(TEST_WATERMARK):
         print(f"✅ {TEST_WATERMARK} - 水印图片（全尺寸）")
+    if os.path.exists(TEST_LOGO):
+        print(f"✅ {TEST_LOGO} - 测试Logo（100x100）")
     if os.path.exists(TEST_INSERT_VIDEO):
         print(f"✅ {TEST_INSERT_VIDEO} - 插入视频（2秒）")
     if os.path.exists(OUTPUT_VIDEO_WATERMARK):
@@ -395,6 +816,18 @@ if __name__ == '__main__':
         print(f"✅ {OUTPUT_VIDEO_TEXT} - 文字水印结果")
     if os.path.exists(OUTPUT_VIDEO_INSERT):
         print(f"✅ {OUTPUT_VIDEO_INSERT} - 视频插入结果")
+    if os.path.exists(OUTPUT_VIDEO_COMBO_TEXT):
+        print(f"✅ {OUTPUT_VIDEO_COMBO_TEXT} - 组合水印（仅文字）")
+    if os.path.exists(OUTPUT_VIDEO_COMBO_LOGO):
+        print(f"✅ {OUTPUT_VIDEO_COMBO_LOGO} - 组合水印（Logo+文字，合并模式）")
+    if os.path.exists(os.path.join(TEST_OUTPUT_DIR, 'output_combo_custom.mp4')):
+        print(f"✅ {os.path.join(TEST_OUTPUT_DIR, 'output_combo_custom.mp4')} - 组合水印（自定义样式）")
+    if os.path.exists(os.path.join(TEST_OUTPUT_DIR, 'output_combo_vertical.mp4')):
+        print(f"✅ {os.path.join(TEST_OUTPUT_DIR, 'output_combo_vertical.mp4')} - 组合水印（垂直合并）")
+    if os.path.exists(os.path.join(TEST_OUTPUT_DIR, 'output_combo_separate.mp4')):
+        print(f"✅ {os.path.join(TEST_OUTPUT_DIR, 'output_combo_separate.mp4')} - 组合水印（分离模式）")
+    if os.path.exists(os.path.join(TEST_OUTPUT_DIR, 'output_combo_scale_sep.mp4')):
+        print(f"✅ {os.path.join(TEST_OUTPUT_DIR, 'output_combo_scale_sep.mp4')} - 组合水印（分离模式缩放）")
     print("\n🎬 请使用播放器查看.mp4文件确认效果")
     print("="*60)
 

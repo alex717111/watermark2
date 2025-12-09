@@ -9,6 +9,7 @@ import click
 
 from .watermark import add_image_watermark
 from .watermark.text_watermark_v2 import add_text_watermark as add_text_watermark_v2
+from .watermark.combo_watermark import add_combo_watermark
 from .insert import insert_video
 from .logger_config import setup_logger, get_logger
 
@@ -243,6 +244,174 @@ def watermark_text(input, output, text, position, font_size, color, font,
 
         logger.info("处理完成")
         click.echo(f'✅ 文字水印添加成功: {output}')
+
+    except Exception as e:
+        error_msg = f'处理失败: {str(e)}'
+        logger.exception(error_msg)
+        click.echo(f'❌ 错误: {str(e)}', err=True)
+        sys.exit(1)
+    finally:
+        logger.info("=" * 60)
+
+
+@cli.command()
+@click.option('--input', '-i', required=True, type=click.Path(exists=True),
+              help='输入视频文件路径')
+@click.option('--output', '-o', required=True, type=click.Path(),
+              help='输出视频文件路径')
+@click.option('--watermark', '-w', type=click.Path(exists=True),
+              help='Logo图片路径（可选，支持PNG透明背景）')
+@click.option('--logo-position', default='top-left',
+              type=click.Choice(list(POSITIONS.keys()), case_sensitive=False),
+              help='Logo位置（默认：top-left）')
+@click.option('--logo-opacity', type=click.FloatRange(0.0, 1.0), default=0.9,
+              help='Logo透明度 0.0-1.0（默认：0.9）')
+@click.option('--logo-margin', type=int, default=10,
+              help='Logo边距（像素，默认：10）')
+@click.option('--logo-width', type=int, default=None,
+              help='Logo宽度（像素，指定则覆盖自动缩放）')
+@click.option('--logo-height', type=int, default=None,
+              help='Logo高度（像素，指定则覆盖自动缩放）')
+@click.option('--logo-scale-factor', type=click.FloatRange(0.1, 5.0), default=1.0,
+              help='Logo相对于字体高度的缩放因子（默认：1.0）')
+@click.option('--text', '-t', required=True, type=str,
+              help='水印文字内容（必需）')
+@click.option('--text-position', default='bottom-right',
+              type=click.Choice(list(POSITIONS.keys()), case_sensitive=False),
+              help='文字位置（默认：bottom-right）')
+@click.option('--font-size', type=int, default=24,
+              help='字体大小（默认：24）')
+@click.option('--color', type=str, default='white',
+              help='文字颜色（默认：white，支持颜色名称或十六进制如#FF0000）')
+@click.option('--font', type=str, default=None,
+              help='字体文件路径（TTF格式）')
+@click.option('--text-opacity', type=click.FloatRange(0.0, 1.0), default=0.9,
+              help='文字透明度 0.0-1.0（默认：0.9）')
+@click.option('--stroke-width', type=int, default=1,
+              help='描边宽度（默认：1，0表示无描边）')
+@click.option('--stroke-color', type=str, default='black',
+              help='描边颜色（默认：black）')
+@click.option('--vertical-margin', type=int, default=10,
+              help='文字垂直边距（像素，默认：10）')
+@click.option('--combine-mode', is_flag=True,
+              help='合并Logo和文字为一张图片（Logo在左，文字在右）')
+@click.option('--combine-layout', type=click.Choice(['horizontal', 'vertical']), default='horizontal',
+              help='合并布局（horizontal: 水平排列，vertical: 垂直排列）')
+@click.option('--combine-spacing', type=int, default=10,
+              help='合并时Logo和文字之间的间距（像素，默认：10）')
+@click.option('--start-time', '-s', type=str, default='0',
+              help='水印开始时间（秒或HH:MM:SS，默认：0）')
+@click.option('--end-time', '-e', type=str, default=None,
+              help='水印结束时间（秒或HH:MM:SS，默认：视频结束）')
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
+              default='INFO', help='日志级别（默认：INFO）')
+def watermark_combo(input, output, watermark, logo_position, logo_opacity, logo_margin,
+                    logo_width, logo_height, logo_scale_factor, text, text_position,
+                    font_size, color, font, text_opacity, stroke_width, stroke_color,
+                    vertical_margin, combine_mode, combine_layout, combine_spacing,
+                    start_time, end_time, log_level):
+    """向视频添加组合水印（Logo + 文字）"""
+    # 设置日志级别
+    logger.setLevel(getattr(logging, log_level))
+    logger.info("=" * 60)
+    logger.info("开始处理：组合水印（Logo + 文字）")
+    logger.info(f"输入文件: {input}")
+    logger.info(f"输出文件: {output}")
+    if watermark:
+        logger.info(f"Logo文件: {watermark}")
+    logger.info(f"文字内容: {text}")
+
+    try:
+        # 检查输入文件
+        if not os.path.isfile(input):
+            error_msg = f'错误：输入文件不存在: {input}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
+            sys.exit(1)
+
+        if watermark and not os.path.isfile(watermark):
+            error_msg = f'错误：Logo文件不存在: {watermark}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
+            sys.exit(1)
+
+        if font and not os.path.isfile(font):
+            error_msg = f'错误：字体文件不存在: {font}'
+            logger.error(error_msg)
+            click.echo(f'{error_msg}', err=True)
+            sys.exit(1)
+
+        logger.debug("输入文件验证通过")
+
+        # 转换位置参数
+        logo_pos_h, logo_pos_v = POSITIONS[logo_position]
+        text_pos_h, text_pos_v = POSITIONS[text_position]
+        logger.debug(f"Logo位置: {logo_position} -> ({logo_pos_h}, {logo_pos_v})")
+        logger.debug(f"文字位置: {text_position} -> ({text_pos_h}, {text_pos_v})")
+
+        # 转换时间
+        start_sec = _time_str_to_seconds(start_time)
+        end_sec = _time_str_to_seconds(end_time) if end_time else None
+        logger.debug(f"时间范围: {start_sec}s - {end_sec}s")
+
+        click.echo(f'正在添加组合水印到视频...')
+        click.echo(f'  输入: {input}')
+        click.echo(f'  输出: {output}')
+        if watermark:
+            click.echo(f'  Logo: {watermark}')
+            click.echo(f'  Logo位置: {logo_position}')
+            click.echo(f'  Logo透明度: {logo_opacity}')
+            if logo_width or logo_height:
+                click.echo(f'  Logo尺寸: {logo_width or '自动'} x {logo_height or '自动'}')
+            else:
+                click.echo(f'  Logo缩放: 匹配文字高度 x{logo_scale_factor}')
+        click.echo(f'  文字: "{text}"')
+        click.echo(f'  文字位置: {text_position}')
+        click.echo(f'  字体大小: {font_size}px')
+        click.echo(f'  文字透明度: {text_opacity}')
+
+        logger.info(f"Logo位置: {logo_position}")
+        logger.info(f"文字位置: {text_position}")
+        logger.info(f"字体大小: {font_size}px")
+        logger.info(f"开始调用处理函数...")
+
+        # 显示合并模式信息
+        if combine_mode:
+            click.echo(f'  合并模式: 启用（Logo和文字合并为一张图片）')
+            click.echo(f'  合并布局: {combine_layout}')
+            click.echo(f'  合并间距: {combine_spacing}px')
+
+        logger.info(f"开始调用处理函数...")
+
+        # 调用组合水印函数
+        add_combo_watermark(
+            video_path=input,
+            output_path=output,
+            text=text,
+            watermark_path=watermark,
+            logo_position=(logo_pos_h, logo_pos_v),
+            logo_opacity=logo_opacity,
+            logo_margin=logo_margin,
+            logo_width=logo_width,
+            logo_height=logo_height,
+            logo_scale_factor=logo_scale_factor,
+            text_position=(text_pos_h, text_pos_v),
+            font_size=font_size,
+            color=color,
+            font_path=font,
+            text_opacity=text_opacity,
+            stroke_width=stroke_width,
+            stroke_color=stroke_color,
+            vertical_margin=vertical_margin,
+            combine_mode=combine_mode,
+            combine_layout=combine_layout,
+            combine_spacing=combine_spacing,
+            start_time=start_sec,
+            end_time=end_sec
+        )
+
+        logger.info("处理完成")
+        click.echo(f'✅ 组合水印添加成功: {output}')
 
     except Exception as e:
         error_msg = f'处理失败: {str(e)}'

@@ -133,7 +133,117 @@ python main.py watermark \
 - 支持复杂效果：渐变、阴影、多元素组合
 - 处理质量更高，无缩放失真
 
-### 2. 添加文字水印
+### 2. 添加组合水印（Logo + 文字）
+
+**推荐使用合并模式**：将Logo和文字合并为一张图片，Logo自动缩放匹配文字高度，作为一个整体水印添加到视频中。
+
+**两种模式：**
+
+**模式一：合并模式（推荐）**
+- 使用 `--combine-mode` 将Logo和文字合并为一张图片
+- Logo自动缩放匹配文字高度
+- 只需要一个位置参数（`--logo-position`）
+- Logo在左，文字在右（或垂直排列）
+
+**模式二：分离模式（高级）**
+- Logo和文字分别定位（使用 `--logo-position` 和 `--text-position`）
+- 更灵活，可以放置在不同位置
+- 适合特殊布局需求
+
+```bash
+# 仅文字水印（替代watermark-text）
+python main.py watermark-combo -i input.mp4 -o output.mp4 -t "Copyright 2025"
+
+# 合并模式：Logo + 文字（推荐）
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output.mp4 \
+  -w logo.png \
+  -t "My Channel" \
+  --combine-mode \
+  --logo-position bottom-right \
+  --font-size 36
+
+# 合并模式：调整Logo大小和间距
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output.mp4 \
+  -w logo.png \
+  -t "Copyright 2025" \
+  --combine-mode \
+  --logo-scale-factor 1.2 \
+  --combine-spacing 20 \
+  --font-size 32
+
+# 合并模式：垂直排列（Logo在上，文字在下）
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output.mp4 \
+  -w logo.png \
+  -t "My Channel" \
+  --combine-mode \
+  --combine-layout vertical \
+  --logo-position center
+
+# 指定时间范围
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output.mp4 \
+  -w logo.png \
+  -t "Copyright 2025" \
+  --combine-mode \
+  --start-time 10 \
+  --end-time 60
+
+# 分离模式：自定义位置（高级，Logo和文字分别定位）
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output.mp4 \
+  -w logo.png \
+  -t "My Watermark" \
+  --logo-position top-left \
+  --text-position bottom-right \
+  --font-size 36 \
+  --color red
+```
+
+**参数说明：**
+- `-t, --text`: 水印文字内容（必需）
+- `-w, --watermark`: Logo图片路径（可选，支持PNG透明背景）
+- `--combine-mode`: 合并Logo和文字为一张图片
+- `--combine-layout`: 合并布局（horizontal: 水平排列，vertical: 垂直排列）
+- `--combine-spacing`: 合并时Logo和文字之间的间距（像素，默认：10）
+- `--logo-position`: Logo位置（默认：top-left，在合并模式中为整体位置）
+- `--logo-opacity`: Logo透明度 0.0-1.0（默认：0.9，在合并模式中为整体透明度）
+- `--logo-margin`: Logo边距（默认：10）
+- `--logo-width`: Logo宽度（像素，指定则覆盖自动缩放）
+- `--logo-height`: Logo高度（像素，指定则覆盖自动缩放）
+- `--logo-scale-factor`: Logo相对于字体高度的缩放因子（默认：1.0）
+- `--text-position`: 文字位置（分离模式使用，默认：bottom-right）
+- `--font-size`: 字体大小（默认：24）
+- `--color`: 文字颜色（默认：white）
+- `--font`: 字体文件路径（TTF格式）
+- `--text-opacity`: 文字透明度 0.0-1.0（分离模式使用，默认：0.9）
+- `--stroke-width`: 描边宽度（默认：1，0表示无描边）
+- `--stroke-color`: 描边颜色（默认：black）
+- `--vertical-margin`: 文字垂直边距像素（分离模式使用，默认：10）
+- `--start-time`: 水印开始时间（秒或HH:MM:SS，默认：0）
+- `--end-time`: 水印结束时间（秒或HH:MM:SS，默认：视频结束）
+
+**Logo自动缩放说明：**
+- 默认情况下，Logo高度会自动匹配文字高度
+- 使用 `--logo-scale-factor` 可以调整相对大小，例如 `1.2` 表示比文字高20%
+- 如果手动指定 `--logo-width` 或 `--logo-height`，则自动缩放失效
+
+**合并模式优势：**
+- Logo和文字作为一个整体，间距固定且美观
+- 只需指定一个位置参数（`--logo-position`）
+- Logo自动缩放匹配文字高度，无需手动调整
+- 整体透明度统一控制
+
+### 3. 添加文字水印（兼容旧版）
+
+**推荐使用 `watermark-combo` 命令替代**，此命令仅为向后兼容保留。
 
 ```bash
 # 基本用法
@@ -179,7 +289,7 @@ python main.py watermark-text \
 
 **提示**：如果文字水印的顶部或底部被截断（特别是包含 g, j, p, q, y 等字母时），请增加 `--vertical-margin` 参数的值。
 
-### 3. 插入视频
+### 4. 插入视频
 
 ```bash
 # 基本用法
@@ -214,7 +324,7 @@ python main.py insert \
   - `mute`: 静音
 - `--crossfade`: 交叉淡入淡出时长（秒，默认：0）
 
-### 4. 查看位置选项
+### 5. 查看位置选项
 
 ```bash
 python main.py positions
@@ -259,7 +369,28 @@ python main.py watermark \
 ```
 用于简单的logo或不需要复杂设计的水印。
 
-### 示例3：在视频开头添加版权声明
+### 示例3：使用组合水印（Logo + 文字）
+```bash
+# Logo在左上，文字在右下（默认布局）
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output_with_combo.mp4 \
+  -w logo.png \
+  -t "Copyright 2025" \
+  --logo-scale-factor 1.2
+
+# 仅添加文字（替代watermark-text）
+python main.py watermark-combo \
+  -i input.mp4 \
+  -o output_text_only.mp4 \
+  -t "My Watermark" \
+  --font-size 48 \
+  --color yellow \
+  --stroke-width 2 \
+  --text-position center
+```
+
+### 示例4：在视频开头添加版权声明
 ```bash
 python main.py watermark-text \
   -i input.mp4 \
@@ -272,7 +403,7 @@ python main.py watermark-text \
   --end-time 5
 ```
 
-### 示例3：在视频中间插入广告
+### 示例5：在视频中间插入广告
 ```bash
 python main.py insert \
   -m main_video.mp4 \
