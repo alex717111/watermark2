@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QLineEdit, QFileDialog, QMessageBox,
     QTabWidget, QGroupBox, QFormLayout, QSpinBox, QDoubleSpinBox,
     QComboBox, QCheckBox, QListWidget, QProgressBar, QTextEdit,
-    QSplitter, QFrame, QScrollArea, QStackedLayout, QSizePolicy
+    QSplitter, QFrame, QScrollArea, QStackedLayout
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QColor
@@ -120,8 +120,7 @@ class VideoWatermarkWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("视频水印工具 v1.0")
-        self.resize(1200, 800)  # 设置初始大小
-        self.setMinimumSize(900, 600)  # 设置最小尺寸
+        self.setMinimumSize(1200, 800)
         self.logger = logging.getLogger('video_watermark_ui')
 
         # 取消标志
@@ -144,23 +143,14 @@ class VideoWatermarkWindow(QMainWindow):
 
         # 主布局
         self.main_layout = QVBoxLayout(central_widget)
-        self.main_layout.setSpacing(10)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)  # 移除边距
+        self.main_layout.setSpacing(15)
 
         # 功能选择（简化版）
         self.create_function_selection()
 
-        # 创建滚动区域用于主面板
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # 关闭横向滚动条
-
         # 主面板（中间的所有内容）
         main_panel = self.create_main_panel()
-        scroll_area.setWidget(main_panel)
-
-        self.main_layout.addWidget(scroll_area)
+        self.main_layout.addWidget(main_panel)
 
         # 状态栏
         self.status_bar = self.statusBar()
@@ -192,10 +182,7 @@ class VideoWatermarkWindow(QMainWindow):
         """创建主面板（简洁版）"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setSpacing(8)
-
-        # 设置面板的尺寸策略
-        panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        layout.setSpacing(15)
 
         # 文件选择区域
         file_group = self.create_file_selection_area()
@@ -356,7 +343,6 @@ class VideoWatermarkWindow(QMainWindow):
         # Logo设置组
         logo_group = QGroupBox("Logo设置（可选）")
         logo_layout = QVBoxLayout()
-        logo_layout.setSpacing(8)
 
         # Logo文件选择
         logo_file_layout = QHBoxLayout()
@@ -373,10 +359,29 @@ class VideoWatermarkWindow(QMainWindow):
 
         logo_layout.addLayout(logo_file_layout)
 
-        # Logo透明度（初始禁用）
+        # Logo选项（初始禁用）
         self.logo_options_widget = QWidget()
         logo_options_layout = QFormLayout(self.logo_options_widget)
 
+        # Logo位置
+        self.logo_position_combo = QComboBox()
+        logo_position_items = [
+            ("左上", "top-left"),
+            ("中上", "top-center"),
+            ("右上", "top-right"),
+            ("左中", "center-left"),
+            ("正中", "center"),
+            ("右中", "center-right"),
+            ("左下", "bottom-left"),
+            ("中下", "bottom-center"),
+            ("右下", "bottom-right")
+        ]
+        for display_text, internal_value in logo_position_items:
+            self.logo_position_combo.addItem(display_text, internal_value)
+        self.logo_position_combo.setCurrentText("右下")  # 默认右下
+        logo_options_layout.addRow("Logo位置：", self.logo_position_combo)
+
+        # Logo透明度
         self.logo_opacity_spin = QDoubleSpinBox()
         self.logo_opacity_spin.setRange(0.0, 1.0)
         self.logo_opacity_spin.setValue(0.9)
@@ -393,7 +398,6 @@ class VideoWatermarkWindow(QMainWindow):
         # 合并模式设置组
         self.combine_mode_group = QGroupBox("合并模式设置（推荐）")
         combine_layout = QFormLayout()
-        combine_layout.setVerticalSpacing(8)
 
         # Logo缩放因子
         self.logo_scale_spin = QDoubleSpinBox()
@@ -422,7 +426,6 @@ class VideoWatermarkWindow(QMainWindow):
         # 文字基本设置
         text_group = QGroupBox("文字设置")
         text_layout = QFormLayout()
-        text_layout.setVerticalSpacing(8)
 
         # 水印文字
         self.text_edit = QLineEdit("Sample Watermark")
@@ -454,7 +457,6 @@ class VideoWatermarkWindow(QMainWindow):
         # 全局设置
         global_group = QGroupBox("位置和透明度")
         global_layout = QFormLayout()
-        global_layout.setVerticalSpacing(8)
 
         # 位置（当没有Logo时使用，或分离模式使用）
         self.position_combo = QComboBox()
@@ -672,11 +674,11 @@ class VideoWatermarkWindow(QMainWindow):
 
             elif current_tab == 1:  # 文字水印/组合水印
                 # 检查是否选择了Logo文件
-                position_value = self.position_combo.currentData()
-                position_tuple = _convert_position_value(position_value)
-
                 if self.logo_edit.text():
-                    # 使用组合水印（整体位置使用position参数）
+                    # 使用组合水印
+                    logo_position_value = self.logo_position_combo.currentData()
+                    logo_position_tuple = _convert_position_value(logo_position_value)
+
                     params = {
                         'video_path': str(input_path),
                         'output_path': output_path,
@@ -690,7 +692,7 @@ class VideoWatermarkWindow(QMainWindow):
                         'stroke_width': self.stroke_width_spin.value(),
                         'stroke_color': self.stroke_color_button.get_color(),
                         'start_time': float(self.start_time_edit.text() or 0),
-                        'position': position_tuple,  # 整体水印位置
+                        'logo_position': logo_position_tuple,
                         'logo_opacity': self.logo_opacity_spin.value(),
                         'logo_scale_factor': self.logo_scale_spin.value(),
                     }
@@ -701,6 +703,8 @@ class VideoWatermarkWindow(QMainWindow):
                     task_type = 'watermark_combo'
                 else:
                     # 使用纯文字水印
+                    position_value = self.position_combo.currentData()
+                    position_tuple = _convert_position_value(position_value)
                     params = {
                         'video_path': str(input_path),
                         'text': self.text_edit.text(),
@@ -817,11 +821,11 @@ class VideoWatermarkWindow(QMainWindow):
 
                     elif current_tab == 1:  # 文字水印/组合水印
                         # 检查是否选择了Logo文件
-                        position_value = self.position_combo.currentData()
-                        position_tuple = _convert_position_value(position_value)
-
                         if self.logo_edit.text():
-                            # 使用组合水印（整体位置使用position参数）
+                            # 使用组合水印
+                            logo_position_value = self.logo_position_combo.currentData()
+                            logo_position_tuple = _convert_position_value(logo_position_value)
+
                             params = {
                                 'video_path': str(video_file),
                                 'output_path': str(output_file_path),
@@ -835,7 +839,7 @@ class VideoWatermarkWindow(QMainWindow):
                                 'stroke_width': self.stroke_width_spin.value(),
                                 'stroke_color': self.stroke_color_button.get_color(),
                                 'start_time': float(self.start_time_edit.text() or 0),
-                                'position': position_tuple,  # 整体水印位置
+                                'logo_position': logo_position_tuple,
                                 'logo_opacity': self.logo_opacity_spin.value(),
                                 'logo_scale_factor': self.logo_scale_spin.value(),
                             }
@@ -844,6 +848,8 @@ class VideoWatermarkWindow(QMainWindow):
                             add_combo_watermark(**params)
                         else:
                             # 使用纯文字水印
+                            position_value = self.position_combo.currentData()
+                            position_tuple = _convert_position_value(position_value)
                             params = {
                                 'video_path': str(video_file),
                                 'text': self.text_edit.text(),

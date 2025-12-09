@@ -164,7 +164,7 @@ def create_text_image(
     else:
         draw.text((x, y), text, font=font, fill=color)
 
-    return image, text_height
+    return image, img_height
 
 
 def add_combo_watermark(
@@ -172,6 +172,7 @@ def add_combo_watermark(
     output_path: str,
     text: str,
     watermark_path: Optional[str] = None,
+    position: Tuple[str, str] = ('right', 'bottom'),
     logo_position: Tuple[str, str] = ('left', 'top'),
     logo_opacity: float = 0.9,
     logo_margin: int = 10,
@@ -199,6 +200,7 @@ def add_combo_watermark(
         output_path: 输出视频文件路径
         text: 水印文字内容（必需）
         watermark_path: 水印图片文件路径（可选）
+        position: 水印整体位置元组(horizontal, vertical)（合并模式使用）
         logo_position: Logo位置元组(horizontal, vertical)（分离模式使用）
         logo_opacity: Logo透明度
         logo_margin: Logo边距（分离模式使用）
@@ -230,6 +232,12 @@ def add_combo_watermark(
 
     # 准备视频层列表
     layers = [video]
+
+    # 初始化变量，用于资源清理
+    text_watermark = None
+    logo = None
+    final_video = None
+    temp_text_path = None
 
     # 如果提供了logo且处于合并模式，将logo和文字合并为一张图片
     if watermark_path and os.path.exists(watermark_path) and combine_mode:
@@ -289,9 +297,9 @@ def add_combo_watermark(
         watermark = watermark.with_duration(end_time - start_time)
         watermark = watermark.with_opacity(logo_opacity)  # 使用logo透明度作为整体透明度
 
-        # 设置位置（使用logo_position）
+        # 设置位置（使用position参数）
         watermark = watermark.with_position(
-            _get_position_function(video, watermark, logo_position, logo_margin)
+            _get_position_function(video, watermark, position, logo_margin)
         )
 
         # 添加到图层
@@ -395,15 +403,28 @@ def add_combo_watermark(
     )
 
     # 清理资源
-    video.close()
-    text_watermark.close()
-    if watermark_path and os.path.exists(watermark_path):
-        logo.close()
-    final_video.close()
+    try:
+        video.close()
+        if text_watermark is not None:
+            text_watermark.close()
+        if logo is not None:
+            logo.close()
+        if final_video is not None:
+            final_video.close()
+    except Exception as e:
+        print(f"清理资源时发生错误: {e}")
 
     # 删除临时文件
+    if temp_text_path is not None:
+        try:
+            os.remove(temp_text_path)
+        except:
+            pass
+
+    # 删除合并模式的临时文件（如果存在）
     try:
-        os.remove(temp_text_path)
+        if 'temp_combined_path' in locals():
+            os.remove(temp_combined_path)
     except:
         pass
 
